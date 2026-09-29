@@ -8,18 +8,65 @@ services:
     environment:
       # Mot de passe des comptes SYS / SYSTEM (administration uniquement)
       ORACLE_PASSWORD: ${ORACLE_PASSWORD:?ORACLE_PASSWORD manquant dans .env}
-      # Utilisateur applicatif créé automatiquement dans la PDB FREEPDB1,
-      # avec des droits limités (CONNECT, RESOURCE) : c'est lui qu'utilise l'API
+      # Propriétaire du schéma, créé automatiquement dans la PDB FREEPDB1 (utilisé par Alembic)
       APP_USER: ${APP_USER:?APP_USER manquant dans .env}
       APP_USER_PASSWORD: ${APP_USER_PASSWORD:?APP_USER_PASSWORD manquant dans .env}
+      # Utilisateur de l'API (lecture/écriture seulement), créé par docker/oracle/initdb
+      API_USER: ${API_USER:?API_USER manquant dans .env}
+      API_USER_PASSWORD: ${API_USER_PASSWORD:?API_USER_PASSWORD manquant dans .env}
     volumes:
       - oracle-data:/opt/oracle/oradata
+      # Scripts de sécurisation, exécutés uniquement à la première initialisation
+      - ./docker/oracle/initdb:/container-entrypoint-initdb.d:ro
     healthcheck:
       test: ["CMD", "healthcheck.sh"]
       interval: 10s
       timeout: 5s
       retries: 10
       start_period: 60s
+    restart: unless-stopped
+
+  # Migrations Alembic : s'exécute une fois (alembic upgrade head) puis s'arrête.
+  # Seul conteneur à recevoir le mot de passe du propriétaire du schéma.
+  migrate:
+    build: .
+    image: bibliotheque-api
+    container_name: bibliotheque-migrate
+    profiles: ["api"]
+    command: ["alembic", "upgrade", "head"]
+    environment:
+      DB_HOST: oracle  # dans le réseau Docker, Oracle est joignable par le nom de son service
+      DB_PORT: 1521
+      APP_USER: ${APP_USER}
+      APP_USER_PASSWORD: ${APP_USER_PASSWORD}
+    depends_on:
+      oracle:
+        condition: service_healthy
+    restart: "no"
+
+  # API FastAPI conteneurisée : lancée seulement avec `docker compose --profile api up -d`
+  # (en développement, on utilise plutôt `uv run fastapi dev src/main.py` en local)
+  api:
+    image: bibliotheque-api
+    container_name: bibliotheque-api
+    profiles: ["api"]
+    # Pas d'env_file : l'API ne reçoit que ses propres variables,
+    # jamais ORACLE_PASSWORD ni APP_USER_PASSWORD
+    environment:
+      DB_HOST: oracle
+      DB_PORT: 1521
+      APP_USER: ${APP_USER}  # nom du schéma uniquement, sans mot de passe
+      API_USER: ${API_USER}
+      API_USER_PASSWORD: ${API_USER_PASSWORD}
+      SECRET_KEY: ${SECRET_KEY:?SECRET_KEY manquant dans .env}
+      ACCESS_TOKEN_EXPIRE_MINUTES: ${ACCESS_TOKEN_EXPIRE_MINUTES:-30}
+    ports:
+      - "127.0.0.1:8000:8000"
+    depends_on:
+      oracle:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
     restart: unless-stopped
 
   # Interface web pour explorer la base : http://127.0.0.1:8978

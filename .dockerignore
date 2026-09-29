@@ -1,0 +1,8 @@
+# Les secrets sont injectés par docker compose (env_file), jamais copiés dans l'image
+.env
+.venv
+.git
+**/__pycache__
+docker
+*.pdf
+*.md
