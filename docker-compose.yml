@@ -1,0 +1,40 @@
+services:
+  oracle:
+    image: gvenzl/oracle-free:23-slim
+    container_name: bibliotheque-oracle
+    ports:
+      # Écoute uniquement en local (IPv4) : la base n'est pas exposée au réseau
+      - "127.0.0.1:${DB_PORT:-1521}:1521"
+    environment:
+      # Mot de passe des comptes SYS / SYSTEM (administration uniquement)
+      ORACLE_PASSWORD: ${ORACLE_PASSWORD:?ORACLE_PASSWORD manquant dans .env}
+      # Utilisateur applicatif créé automatiquement dans la PDB FREEPDB1,
+      # avec des droits limités (CONNECT, RESOURCE) : c'est lui qu'utilise l'API
+      APP_USER: ${APP_USER:?APP_USER manquant dans .env}
+      APP_USER_PASSWORD: ${APP_USER_PASSWORD:?APP_USER_PASSWORD manquant dans .env}
+    volumes:
+      - oracle-data:/opt/oracle/oradata
+    healthcheck:
+      test: ["CMD", "healthcheck.sh"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 60s
+    restart: unless-stopped
+
+  # Interface web pour explorer la base : http://127.0.0.1:8978
+  cloudbeaver:
+    image: dbeaver/cloudbeaver:latest
+    container_name: bibliotheque-cloudbeaver
+    ports:
+      - "127.0.0.1:8978:8978"
+    volumes:
+      - cloudbeaver-data:/opt/cloudbeaver/workspace
+    depends_on:
+      oracle:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  oracle-data:
+  cloudbeaver-data:
