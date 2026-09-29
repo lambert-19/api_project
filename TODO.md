@@ -11,12 +11,21 @@ Stack imposée : **Oracle + Python + FastAPI + SQLAlchemy + Alembic + Pydantic**
   - [x] Variables lues depuis `.env` : `ORACLE_PASSWORD`, `APP_USER`, `APP_USER_PASSWORD` (l'image crée automatiquement l'utilisateur applicatif)
   - [x] Volume nommé (ex. `oracle-data:/opt/oracle/oradata`) pour conserver les données entre les redémarrages
   - [x] `healthcheck` (l'image fournit `healthcheck.sh`) pour savoir quand la base est prête
-  - [ ] (Optionnel) Scripts SQL d'initialisation montés dans `/container-entrypoint-initdb.d` (droits, rôles)
-  - [ ] (Bonus) Service `api` (Dockerfile de l'app FastAPI) avec `depends_on: oracle: condition: service_healthy`
+  - [x] Script d'initialisation `docker/oracle/initdb/01-securite.sh` monté dans `/container-entrypoint-initdb.d` :
+    - [x] `BIBLIO` (propriétaire, Alembic) : `DB_DEVELOPER_ROLE` retiré, droits minimaux (SESSION, TABLE, SEQUENCE, VIEW), quota 100 Mo
+    - [x] `BIBLIO_API` (API) : connexion + rôle `BIBLIO_API_ROLE` uniquement (vérifié : `CREATE TABLE` refusé)
+    - [x] Profil `BIBLIO_PROFILE` : verrouillage après 5 échecs (15 min), pas de réutilisation des mots de passe
+    - [x] Audit unifié : échecs de connexion (tous utilisateurs) et DDL/GRANT de BIBLIO et BIBLIO_API
+  - [x] (Bonus) Service `api` (Dockerfile de l'app FastAPI) avec `depends_on: oracle: condition: service_healthy`
+    - [x] Image `uv` multi-couches, utilisateur non-root, healthcheck sur `/health`, `.env` jamais copié dans l'image
+    - [x] Profil Compose `api` : `docker compose --profile api up -d --build`
+    - [x] Service `migrate` (`alembic upgrade head`, s'exécute une fois) ; `api` démarre après sa réussite
+    - [x] L'API ne reçoit que ses variables (ni `ORACLE_PASSWORD` ni `APP_USER_PASSWORD`)
   - [x] Tester : `docker compose up -d`, `docker compose ps` (statut *healthy*), `docker compose logs -f oracle`
   - [x] Service `cloudbeaver` : interface web pour explorer la base sur http://localhost:8978
-- [ ] Vérifier que l'utilisateur/schéma Oracle de l'application a des droits limités (partie « base sécurisée », ne pas utiliser SYSTEM)
-- [ ] Fichier `.env` (identifiants Oracle, URL de la base, clé secrète JWT) lu par `pydantic-settings` et par Docker Compose, `.env` ajouté au `.gitignore`, avec un `.env.example` versionné
+- [x] Vérifier que l'utilisateur/schéma Oracle de l'application a des droits limités (partie « base sécurisée », ne pas utiliser SYSTEM)
+- [x] `config.py` : `database_url` (BIBLIO_API, pour l'API) et `migration_url` (BIBLIO, pour Alembic)
+- [x] Fichier `.env` (identifiants Oracle, URL de la base, clé secrète JWT) lu par `pydantic-settings` et par Docker Compose, `.env` ajouté au `.gitignore`, avec un `.env.example` versionné
 - [ ] Organiser le code :
   ```
   src/api_project/
@@ -33,13 +42,18 @@ Stack imposée : **Oracle + Python + FastAPI + SQLAlchemy + Alembic + Pydantic**
   ```
 
 ## Phase 1 : Base de données
-- [ ] `database.py` : engine SQLAlchemy (`oracle+oracledb://...`) et dépendance `get_db()` construite avec `yield`
+- [x] `database.py` : engine SQLAlchemy (`settings.database_url`) et dépendance `get_db()` construite avec `yield`
+  - [x] `Base` avec convention de nommage des contraintes (pour Alembic)
+  - [x] `/health` vérifie la base via `Depends(get_db)`
+  - [x] À chaque connexion : `ALTER SESSION SET CURRENT_SCHEMA = BIBLIO` (les tables appartiennent à BIBLIO, pas à BIBLIO_API)
 - [ ] Modèles SQLAlchemy :
   - [ ] **Utilisateur** : id, nom, email (unique), téléphone, mot_de_passe_hash, date_inscription, rôle (admin/membre)
   - [ ] **Livre** : id, titre, auteur, genre, date_publication, disponible (booléen), éventuellement ISBN
   - [ ] **Emprunt** : id, user_id (FK), livre_id (FK), date_emprunt, date_retour_prévue, date_retour (null tant que le livre n'est pas rendu)
   - [ ] Relations `relationship()`, contraintes et index (email unique, index sur titre/auteur)
-- [ ] `alembic init alembic` et configurer `env.py` avec les modèles (`target_metadata`)
+- [x] `alembic init alembic` et configurer `env.py` avec les modèles (`target_metadata`) et `MigrationSettings.migration_url`
+  - [x] `Base` déplacée dans `models/base.py` ; config séparée API (`Settings`) / migrations (`MigrationSettings`)
+  - [x] Après chaque migration : `GRANT SELECT, INSERT, UPDATE, DELETE` sur toutes les tables de BIBLIO à `BIBLIO_API_ROLE`
 - [ ] Première migration : `alembic revision --autogenerate -m "init"` puis `alembic upgrade head`
 - [ ] Une **deuxième migration** qui modifie le schéma (ex. ajout de `genre` ou `date_retour_prevue`) pour montrer l'évolution avec Alembic à la soutenance
 
