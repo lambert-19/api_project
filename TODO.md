@@ -63,15 +63,16 @@ Stack imposée : **Oracle + Python + FastAPI + SQLAlchemy + Alembic + Pydantic**
   - [x] Réversible (`downgrade -1` / `upgrade head`), recherche par genre testée
 
 ## Phase 2 : Utilisateurs et authentification
-- [ ] Schémas Pydantic : `UserCreate` (`EmailStr`, validation du téléphone), `UserOut` (sans mot de passe)
-- [ ] `POST /users/register` : inscription avec mot de passe hashé
-- [ ] `POST /auth/token` : connexion avec **OAuth2PasswordRequestForm**, renvoie un **JWT**
+- [x] Schémas Pydantic (`src/schemas/utilisateur.py`) : `UtilisateurCreate` (`EmailStr` mis en minuscules, validation du téléphone, mot de passe 8-128 caractères), `UtilisateurOut` (sans mot de passe)
+- [x] `POST /users/register` : inscription avec mot de passe hashé (Argon2), 409 si email déjà utilisé, rôle toujours `membre`
+- [x] `POST /auth/token` : connexion avec **OAuth2PasswordRequestForm**, renvoie un **JWT** (même message d'erreur et même durée que l'email existe ou non)
   📖 *Doc : Tutorial → Security → « OAuth2 with Password (and hashing), Bearer with JWT tokens »*
-- [ ] Dépendance `get_current_user` avec `Depends(oauth2_scheme)` 📖 *Doc : Dependencies*
-- [ ] Dépendance `get_current_admin` pour les routes réservées aux admins
-- [ ] `GET /users/me` : profil de l'utilisateur connecté
-- [ ] `GET /users/me/loans` : emprunts en cours
-- [ ] `GET /users/me/history` : historique des emprunts
+- [x] Dépendance `get_current_user` avec `Depends(oauth2_scheme)` (`src/dependances.py`) 📖 *Doc : Dependencies*
+- [x] Dépendance `get_current_admin` pour les routes réservées aux admins
+- [x] `GET /users/me` : profil de l'utilisateur connecté
+- [x] `GET /users/me/loans` : emprunts en cours
+- [x] `GET /users/me/history` : historique des emprunts
+- [ ] Créer un premier administrateur (l'inscription ne crée que des membres)
 
 ## Phase 3 : Livres
 - [ ] Schémas `BookCreate`, `BookUpdate` (champs optionnels), `BookOut`

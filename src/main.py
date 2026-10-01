@@ -4,12 +4,16 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from database import get_db
+from routers import auth, utilisateurs
 
 app = FastAPI(
     title="API Bibliothèque",
     description="Gestion d'une bibliothèque en ligne : utilisateurs, livres et emprunts.",
     version="0.1.0",
 )
+
+app.include_router(auth.router)
+app.include_router(utilisateurs.router)
 
 
 @app.get("/health", tags=["Système"])
