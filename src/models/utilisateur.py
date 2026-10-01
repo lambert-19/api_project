@@ -23,13 +23,12 @@ class Utilisateur(Base):
 
     id: Mapped[int] = mapped_column(Identity(), primary_key=True)
     nom: Mapped[str] = mapped_column(String(100))
-    # Unique : sert d'identifiant de connexion
     email: Mapped[str] = mapped_column(String(255), unique=True)
     telephone: Mapped[str | None] = mapped_column(String(20))
-    # Seul le hash Argon2 est stocké, jamais le mot de passe
+
     mot_de_passe_hash: Mapped[str] = mapped_column(String(255))
     role: Mapped[RoleUtilisateur] = mapped_column(
-        # VARCHAR2 + contrainte CHECK : Oracle n'a pas de type ENUM
+
         Enum(
             RoleUtilisateur,
             name="role",

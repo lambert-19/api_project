@@ -40,6 +40,7 @@ class Settings(_DatabaseSettings):
     # Utilisateur de l'API : lecture/écriture des données seulement
     api_user: str
     api_user_password: SecretStr
+    db_pool_size: int = 10
 
     # --- Sécurité (JWT) ---
     secret_key: SecretStr

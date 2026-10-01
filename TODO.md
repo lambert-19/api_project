@@ -26,20 +26,7 @@ Stack imposée : **Oracle + Python + FastAPI + SQLAlchemy + Alembic + Pydantic**
 - [x] Vérifier que l'utilisateur/schéma Oracle de l'application a des droits limités (partie « base sécurisée », ne pas utiliser SYSTEM)
 - [x] `config.py` : `database_url` (BIBLIO_API, pour l'API) et `migration_url` (BIBLIO, pour Alembic)
 - [x] Fichier `.env` (identifiants Oracle, URL de la base, clé secrète JWT) lu par `pydantic-settings` et par Docker Compose, `.env` ajouté au `.gitignore`, avec un `.env.example` versionné
-- [ ] Organiser le code :
-  ```
-  src/api_project/
-    main.py          # app FastAPI
-    config.py        # Settings (pydantic-settings)
-    database.py      # engine, SessionLocal, get_db
-    models/          # SQLAlchemy : user.py, book.py, loan.py
-    schemas/         # Pydantic : UserCreate, UserOut, BookCreate...
-    routers/         # users.py, auth.py, books.py, loans.py
-    services/        # logique métier (emprunt, retour...)
-    security.py      # hash mot de passe, JWT
-  alembic/
-  tests/
-  ```
+- [x] Organiser le code : `src/` (main, config, database, security, dependances, exceptions), `models/`, `schemas/`, `routers/`, `services/` ; `alembic/` ; `tests/` (voir la structure dans le README)
 
 ## Phase 1 : Base de données
 - [x] `database.py` : engine SQLAlchemy (`settings.database_url`) et dépendance `get_db()` construite avec `yield`
@@ -104,14 +91,19 @@ Stack imposée : **Oracle + Python + FastAPI + SQLAlchemy + Alembic + Pydantic**
 - [x] Tests avec **TestClient** et pytest : 36 tests (`uv run pytest`), sur la vraie base Oracle 📖 *Testing*
 - [x] Remplacer `get_db` via `app.dependency_overrides` : chaque test tourne dans une transaction annulée à la fin (la base n'est jamais modifiée) 📖 *Testing Dependencies with Overrides*
 - [x] Tester au minimum : inscription, connexion, emprunt d'un livre indisponible (doit échouer), retour (+ jetons expirés/falsifiés, droits admin, CORS, erreurs base)
+- [x] Tests de sécurité (`tests/test_securite.py`) : force brute, injection SQL, jetons falsifiés, Argon2, droits Oracle de l'API
+- [x] Limite des échecs de connexion : 5 par minute et par IP (`429`)
+- [x] Vérifié : verrouillage Oracle après 5 échecs, journal d'audit, `pip-audit` sans vulnérabilité
+- [x] Test de charge (`scripts/charge.py`) : ~1 000 à 1 200 req/s en lecture, ~490 req/s pour emprunt + retour, 0 erreur
+  - [x] Corrigé : `ORA-12516` sous charge → pool de connexions fixe (`DB_POOL_SIZE`)
 - [x] Script de seed : `uv run python src/seed.py` (3 utilisateurs dont 1 admin, 12 livres, 3 emprunts dont 1 en retard ; mot de passe `demo1234`)
 
 ## Phase 7 : Livrables et soutenance
-- [ ] Vérifier que `/docs` (Swagger) est complet et propre
-- [ ] README : installation, copie de `.env.example` vers `.env`, `docker compose up -d`, `alembic upgrade head`, `fastapi dev`
-- [ ] Schéma de la base (MCD ou diagramme des 3 tables)
-- [ ] Préparer les **justifications des choix techniques** : JWT vs sessions, hash Argon2, utilisateur Oracle aux droits limités, transaction sur l'emprunt, séparation routers/services/schémas
-- [ ] Scénario de démo : inscription → connexion → recherche → emprunt → double emprunt (erreur) → retour → historique
+- [x] Vérifier que `/docs` (Swagger) est complet et propre
+- [x] README : routes, données de démo, tests, schéma de la base, choix techniques ; installation, copie de `.env.example` vers `.env`, `docker compose up -d`, `alembic upgrade head`, `fastapi dev`
+- [x] Schéma de la base (diagramme Mermaid des 3 tables dans le README)
+- [x] Préparer les **justifications des choix techniques** : JWT vs sessions, hash Argon2, utilisateur Oracle aux droits limités, transaction sur l'emprunt, séparation routers/services/schémas
+- [x] Scénario de démo (répété et vérifié) : inscription → connexion → recherche → emprunt → double emprunt (erreur) → retour → historique
 - [ ] Répartir le travail dans le binôme (ex. base/Alembic/modèles d'un côté, authentification/routes de l'autre)
 
 ---

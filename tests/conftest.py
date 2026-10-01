@@ -11,6 +11,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
 from database import engine, get_db
+from limiteur import limiteur_connexion
 from main import app
 from models import Livre, RoleUtilisateur, Utilisateur
 from security import hasher_mot_de_passe
@@ -38,6 +39,7 @@ def db() -> Iterator[Session]:
 @pytest.fixture
 def client(db: Session) -> Iterator[TestClient]:
     app.dependency_overrides[get_db] = lambda: db
+    limiteur_connexion.reinitialiser()
     with TestClient(app) as client:
         yield client
     app.dependency_overrides.clear()

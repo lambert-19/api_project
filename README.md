@@ -4,9 +4,6 @@ Mini-projet 5BDDD : API permettant aux utilisateurs d'emprunter et de rendre des
 
 **Stack :** Oracle Database (Docker) · Python 3.13 · FastAPI · SQLAlchemy · Alembic · Pydantic
 
-> Projet en cours de développement : voir l'avancement dans [TODO.md](TODO.md).
-> Mode d'emploi complet (installation, utilisation, administration, dépannage) : [docs/GUIDE_UTILISATION.md](docs/GUIDE_UTILISATION.md).
-
 ## Prérequis
 
 - [Docker Desktop](https://www.docker.com/products/docker-desktop/) (lancé)
@@ -68,6 +65,24 @@ uv run alembic current                                        # version actuelle
 
 Tout nouveau modèle doit être importé dans [src/models/\_\_init\_\_.py](src/models/__init__.py), sinon `--autogenerate` ne le voit pas. Toujours relire le fichier généré avant de l'appliquer.
 
+| Migration | Contenu |
+|---|---|
+| `init` | Tables `utilisateur`, `livre`, `emprunt`, contraintes et index |
+| `ajout genre livre` | Colonne `livre.genre` (indexée) : évolution du schéma |
+
+## Données de démonstration
+
+```powershell
+uv run python src/seed.py          # 3 comptes, 12 livres, 3 emprunts (refusé si la base contient déjà des livres)
+uv run python src/creer_admin.py   # créer un administrateur, ou promouvoir un compte existant
+```
+
+| Compte | Mot de passe | Rôle | Emprunts |
+|---|---|---|---|
+| `admin@demo.fr` | `demo1234` | admin | — |
+| `saer@demo.fr` | `demo1234` | membre | *Dune* en cours, *Les Misérables* rendu |
+| `ibrahim@demo.fr` | `demo1234` | membre | *1984* en retard |
+
 ## Lancer l'API
 
 **En développement** (rechargement automatique à chaque modification) :
@@ -87,6 +102,103 @@ Le service `migrate` applique d'abord les migrations puis s'arrête ; l'API ne d
 Dans les deux cas, l'API est sur **http://127.0.0.1:8000** et la documentation Swagger sur **http://127.0.0.1:8000/docs**. Ne pas lancer les deux en même temps : ils utilisent le même port.
 
 Le service `api` est dans un profil Compose : un simple `docker compose up -d` ne lance que la base et CloudBeaver.
+
+## Routes de l'API
+
+Dans Swagger, cliquer sur **Authorize** et se connecter avec un email et un mot de passe : le jeton JWT est ensuite envoyé automatiquement.
+
+| Méthode | Route | Accès | Rôle |
+|---|---|---|---|
+| `POST` | `/users/register` | public | Inscription (toujours en tant que membre) |
+| `POST` | `/auth/token` | public | Connexion, renvoie un jeton JWT (bloquée 1 min après 5 échecs depuis la même IP : `429`) |
+| `GET` | `/users/me` | connecté | Profil |
+| `GET` | `/users/me/loans` | connecté | Emprunts en cours |
+| `GET` | `/users/me/history` | connecté | Historique des emprunts |
+| `GET` | `/books?title=&author=&genre=&available=&skip=&limit=` | public | Recherche (insensible à la casse) et pagination |
+| `GET` | `/books/{id}` | public | Détail d'un livre |
+| `POST` | `/books` | admin | Ajout |
+| `PATCH` | `/books/{id}` | admin | Modification partielle |
+| `DELETE` | `/books/{id}` | admin | Suppression (refusée si le livre a un historique d'emprunts) |
+| `POST` | `/loans` | connecté | Emprunt d'un livre disponible (14 jours, 5 emprunts en cours maximum) |
+| `POST` | `/loans/{id}/return` | emprunteur ou admin | Retour |
+| `GET` | `/loans/overdue` | admin | Emprunts en retard |
+| `GET` | `/health` | public | État de l'API et de la base |
+
+Codes d'erreur : `401` non connecté ou jeton invalide, `403` droits insuffisants, `404` introuvable, `409` conflit (livre déjà emprunté, email ou ISBN déjà utilisé…), `422` données invalides.
+
+## Tests
+
+```powershell
+uv run pytest                                          # tous les tests
+uv run pytest tests/test_emprunts.py                   # un fichier
+uv run pytest tests/test_emprunts.py::test_retour      # un test
+```
+
+Les tests utilisent la vraie base Oracle (qui doit être lancée) avec le compte de l'API. Chaque test s'exécute dans une transaction annulée à la fin (`get_db` remplacé via `app.dependency_overrides`) : la base n'est jamais modifiée.
+
+[tests/test_securite.py](tests/test_securite.py) couvre la force brute (blocage après 5 échecs), l'injection SQL (recherche, connexion, données stockées), les jetons falsifiés (`alg: none`, contenu modifié, utilisateur inexistant), le stockage des mots de passe (Argon2, sel unique) et les droits du compte Oracle de l'API (`CREATE`, `DROP`, `ALTER`, `TRUNCATE`, `GRANT` refusés).
+
+Vérifié en plus : verrouillage Oracle après 5 échecs (`ORA-28000`), enregistrement dans le journal d'audit, et aucune vulnérabilité connue dans les dépendances (`pip-audit`).
+
+## Performances
+
+```powershell
+uv run fastapi run src/main.py --workers 4         # terminal 1 : API en mode production
+uv run python scripts/charge.py --concurrence 20   # terminal 2 : 10 s par scénario
+```
+
+Le script crée ses propres utilisateurs et livres, puis les supprime. Résultats sur un MacBook Air M1 (API, Oracle et client de test sur la même machine), 20 clients simultanés, 4 workers, aucune erreur :
+
+| Scénario | Requêtes/s | Requêtes/min | Médiane | p95 |
+|---|---:|---:|---:|---:|
+| `GET /books/{id}` | 1 235 | 74 000 | 16 ms | 20 ms |
+| `GET /users/me` (JWT + base) | 1 171 | 70 000 | 16 ms | 21 ms |
+| `GET /books` (recherche) | 1 003 | 60 000 | 19 ms | 25 ms |
+| `POST /loans` + `/return` (transaction) | 487 | 29 000 | 39 ms | 53 ms |
+| `POST /auth/token` (Argon2) | 29 | 1 760 | 612 ms | 1 078 ms |
+
+La connexion est volontairement lente : Argon2 est conçu pour coûter du temps de calcul et de la mémoire, ce qui rend la force brute impraticable. Les autres routes ne vérifient que la signature du jeton JWT, ce qui est quasi instantané.
+
+## Schéma de la base
+
+```mermaid
+erDiagram
+    UTILISATEUR ||--o{ EMPRUNT : effectue
+    LIVRE ||--o{ EMPRUNT : concerne
+
+    UTILISATEUR {
+        int id PK "IDENTITY"
+        varchar nom
+        varchar email UK "en minuscules"
+        varchar telephone "facultatif"
+        varchar mot_de_passe_hash "Argon2"
+        varchar role "CHECK admin ou membre"
+        date date_inscription
+    }
+    LIVRE {
+        int id PK "IDENTITY"
+        varchar titre "indexé"
+        varchar auteur "indexé"
+        varchar genre "indexé, 2e migration"
+        date date_publication "facultatif"
+        varchar isbn UK "facultatif"
+        boolean disponible
+    }
+    EMPRUNT {
+        int id PK "IDENTITY"
+        int utilisateur_id FK
+        int livre_id FK
+        date date_emprunt
+        date date_retour_prevue
+        date date_retour "NULL tant que non rendu"
+    }
+```
+
+Règles garanties par Oracle, même si l'API avait un bug :
+
+- `uq_emprunt_livre_en_cours` : index unique sur `CASE WHEN date_retour IS NULL THEN livre_id END`. Oracle n'indexe pas les valeurs NULL, donc seuls les emprunts en cours sont concernés : **un livre ne peut avoir qu'un seul emprunt en cours**.
+- `ck_emprunt_dates_coherentes` : la date de retour ne peut pas précéder la date d'emprunt.
+- `ck_utilisateur_role`, `uq_utilisateur_email`, `uq_livre_isbn`, et les clés étrangères (un livre emprunté ne peut pas être supprimé).
 
 ## Interface d'administration (CloudBeaver)
 
@@ -141,9 +253,19 @@ Principe du **moindre privilège** : chaque compte n'a que les droits dont il a 
     ├── main.py                 # application FastAPI
     ├── config.py               # Settings (API) et MigrationSettings (Alembic)
     ├── database.py             # connexion SQLAlchemy de l'API, get_db()
-    └── models/
-        ├── __init__.py         # importe tous les modèles (pour Alembic)
-        └── base.py             # Base des modèles, convention de nommage
+    ├── security.py             # hash Argon2 des mots de passe, jetons JWT
+    ├── limiteur.py             # limite des échecs de connexion par IP
+    ├── dependances.py          # get_current_user, get_current_admin
+    ├── exceptions.py           # erreurs métier (404, 403, 409)
+    ├── models/                 # SQLAlchemy : Utilisateur, Livre, Emprunt
+    │   └── __init__.py         # importe tous les modèles (pour Alembic)
+    ├── schemas/                # Pydantic : validation des entrées, forme des réponses
+    ├── routers/                # routes, un APIRouter par ressource
+    ├── services/               # logique métier (emprunt, retour, mail de confirmation)
+    ├── seed.py                 # données de démonstration
+    └── creer_admin.py          # création d'un administrateur
+tests/                          # tests pytest
+scripts/charge.py               # test de charge
 ```
 
 ## Choix techniques
@@ -154,6 +276,13 @@ Principe du **moindre privilège** : chaque compte n'a que les droits dont il a 
 - **Secrets hors du code** : configuration dans `.env` (non versionné), mots de passe typés `SecretStr` pour ne jamais apparaître dans les logs.
 - **Volume Docker** : les données Oracle survivent aux redémarrages du conteneur.
 - **Image de l'API durcie** : exécutée avec un utilisateur non-root, `.env` exclu de l'image (les secrets sont injectés au lancement), dépendances figées par `uv.lock`.
+- **Mots de passe hashés avec Argon2** (recommandé par l'OWASP) : lent et coûteux en mémoire, il résiste aux attaques par force brute. La connexion répond de la même façon, et en autant de temps, que l'email existe ou non.
+- **JWT plutôt que sessions** : l'API ne stocke aucune session ; chaque jeton signé contient l'id de l'utilisateur et expire après 30 minutes.
+- **Emprunt dans une seule transaction** : `SELECT ... FOR UPDATE` verrouille la ligne du livre jusqu'au commit. Deux emprunts simultanés du même livre : le second attend, puis voit le livre indisponible (testé avec 8 requêtes simultanées : 1 acceptée, 7 refusées).
+- **Séparation routers / services / schémas** : les routes gèrent HTTP, les services la logique métier (sans dépendre de HTTP), les schémas la validation.
+- **Limite des échecs de connexion** : 5 échecs par minute et par adresse IP, puis `429` avec l'en-tête `Retry-After`. Seuls les échecs comptent : un utilisateur légitime n'est jamais bloqué.
+- **Pool de connexions fixe** (`DB_POOL_SIZE`, 10 par défaut, sans connexions supplémentaires) : sous forte charge, ouvrir et fermer des connexions en rafale faisait refuser des connexions par Oracle (`ORA-12516`) ; les requêtes attendent désormais une connexion libre.
+- **Aucune fuite d'information** : les erreurs de base sont journalisées côté serveur ; le client reçoit seulement `500 Erreur interne` ou `503`, jamais de requête SQL ni de code ORA.
 
 ## Dépannage
 
@@ -161,4 +290,5 @@ Principe du **moindre privilège** : chaque compte n'a que les droits dont il a 
 - **`docker compose` : failed to connect to the docker API** : Docker Desktop n'est pas lancé.
 - **Connexion refusée (mot de passe invalide)** : le `.env` a été modifié après la première initialisation. Voir la réinitialisation ci-dessus.
 - **`ORA-28000: the account is locked`** : 5 échecs de connexion d'affilée. Attendre 15 minutes, ou déverrouiller en `SYSTEM` : `ALTER USER biblio_api ACCOUNT UNLOCK;`
+- **`bad interpreter: Permission denied` dans les journaux d'Oracle** (macOS/Linux) : le script n'est pas exécutable. Lancer `chmod +x docker/oracle/initdb/01-securite.sh`, puis réinitialiser la base.
 - **Le script d'initialisation échoue avec `$'\r': command not found`** : le fichier `.sh` a des fins de ligne Windows. Le `.gitattributes` force LF ; sinon, le convertir en LF dans VS Code (en bas à droite, `CRLF` → `LF`).

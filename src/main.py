@@ -7,6 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from sqlalchemy import text
 from sqlalchemy.exc import DBAPIError, OperationalError, SQLAlchemyError
+from sqlalchemy.exc import TimeoutError as PoolTimeoutError
 from sqlalchemy.orm import Session
 
 from config import get_settings
@@ -74,7 +75,9 @@ async def erreur_metier(_: Request, exc: ErreurMetier) -> JSONResponse:
 async def erreur_base(request: Request, exc: SQLAlchemyError) -> JSONResponse:
     """Journalise l'erreur complète, mais ne renvoie jamais de détail SQL au client."""
     logger.exception("Erreur base de données sur %s %s", request.method, request.url.path)
-    if isinstance(exc, OperationalError) or (isinstance(exc, DBAPIError) and exc.connection_invalidated):
+    if isinstance(exc, OperationalError | PoolTimeoutError) or (
+        isinstance(exc, DBAPIError) and exc.connection_invalidated
+    ):
         return JSONResponse(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             content={"detail": "Base de données momentanément indisponible"},
