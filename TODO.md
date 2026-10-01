@@ -101,10 +101,10 @@ Stack imposée : **Oracle + Python + FastAPI + SQLAlchemy + Alembic + Pydantic**
 - [x] (Bonus) **BackgroundTasks** : « envoi » d'un mail de confirmation d'emprunt (journalisé) 📖 *Background Tasks*
 
 ## Phase 6 : Tests et qualité
-- [ ] Tests avec **TestClient** et pytest 📖 *Testing*
-- [ ] Remplacer `get_db` par une base de test via `app.dependency_overrides` 📖 *Testing Dependencies with Overrides*
-- [ ] Tester au minimum : inscription, connexion, emprunt d'un livre indisponible (doit échouer), retour
-- [ ] Script de seed (quelques livres et utilisateurs pour la démo)
+- [x] Tests avec **TestClient** et pytest : 36 tests (`uv run pytest`), sur la vraie base Oracle 📖 *Testing*
+- [x] Remplacer `get_db` via `app.dependency_overrides` : chaque test tourne dans une transaction annulée à la fin (la base n'est jamais modifiée) 📖 *Testing Dependencies with Overrides*
+- [x] Tester au minimum : inscription, connexion, emprunt d'un livre indisponible (doit échouer), retour (+ jetons expirés/falsifiés, droits admin, CORS, erreurs base)
+- [x] Script de seed : `uv run python src/seed.py` (3 utilisateurs dont 1 admin, 12 livres, 3 emprunts dont 1 en retard ; mot de passe `demo1234`)
 
 ## Phase 7 : Livrables et soutenance
 - [ ] Vérifier que `/docs` (Swagger) est complet et propre
