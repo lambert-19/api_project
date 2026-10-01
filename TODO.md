@@ -84,10 +84,11 @@ Stack imposée : **Oracle + Python + FastAPI + SQLAlchemy + Alembic + Pydantic**
   📖 *Doc : Query Parameters and String Validations (`Query(min_length=...)`)*
 
 ## Phase 4 : Emprunts
-- [ ] `POST /loans` (body : `book_id`) : vérifier la disponibilité, créer l'emprunt et passer `disponible` à False, **dans une seule transaction**
-- [ ] `POST /loans/{id}/return` : renseigner `date_retour`, remettre `disponible` à True, vérifier que c'est bien l'emprunteur
-- [ ] Codes d'erreur adaptés : 409 (livre déjà emprunté), 403 (pas le droit), 404 (introuvable)
-- [ ] (Bonus) Limite d'emprunts simultanés par utilisateur, liste des retards pour les admins
+- [x] `POST /loans` (body : `livre_id`) : vérifier la disponibilité, créer l'emprunt et passer `disponible` à False, **dans une seule transaction** (`SELECT ... FOR UPDATE` sur le livre, logique dans `src/services/emprunts.py`)
+  - [x] Testé : 8 emprunts simultanés du même livre → 1 seul accepté
+- [x] `POST /loans/{id}/return` : renseigner `date_retour`, remettre `disponible` à True, vérifier que c'est bien l'emprunteur (ou un admin)
+- [x] Codes d'erreur adaptés : 409 (livre déjà emprunté, déjà rendu, limite atteinte), 403 (pas le droit), 404 (introuvable)
+- [x] (Bonus) Limite de 5 emprunts simultanés par utilisateur, `GET /loans/overdue` (retards, admin)
 
 ## Phase 5 : Fonctions FastAPI avancées (demandées par le prof)
 - [ ] **APIRouter** avec `prefix` et `tags` 📖 *Bigger Applications – Multiple Files*
