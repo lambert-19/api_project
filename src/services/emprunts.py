@@ -1,10 +1,10 @@
 from datetime import date, timedelta
 
-from fastapi import HTTPException, status
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from exceptions import Conflit, Interdit, Introuvable
 from models import Emprunt, Livre, RoleUtilisateur, Utilisateur
 
 DUREE_EMPRUNT_JOURS = 14
@@ -20,10 +20,10 @@ def emprunter(db: Session, utilisateur: Utilisateur, livre_id: int) -> Emprunt:
     """
     livre = db.scalar(select(Livre).where(Livre.id == livre_id).with_for_update())
     if livre is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Livre introuvable")
+        raise Introuvable("Livre introuvable")
     if not livre.disponible:
         db.rollback()
-        raise HTTPException(status.HTTP_409_CONFLICT, "Livre déjà emprunté ou indisponible")
+        raise Conflit("Livre déjà emprunté ou indisponible")
 
     en_cours = db.scalar(
         select(func.count())
@@ -32,10 +32,7 @@ def emprunter(db: Session, utilisateur: Utilisateur, livre_id: int) -> Emprunt:
     )
     if en_cours >= MAX_EMPRUNTS_EN_COURS:
         db.rollback()
-        raise HTTPException(
-            status.HTTP_409_CONFLICT,
-            f"Limite de {MAX_EMPRUNTS_EN_COURS} emprunts en cours atteinte",
-        )
+        raise Conflit(f"Limite de {MAX_EMPRUNTS_EN_COURS} emprunts en cours atteinte")
 
     emprunt = Emprunt(
         utilisateur=utilisateur,
@@ -48,7 +45,7 @@ def emprunter(db: Session, utilisateur: Utilisateur, livre_id: int) -> Emprunt:
         db.commit()
     except IntegrityError:
         db.rollback()
-        raise HTTPException(status.HTTP_409_CONFLICT, "Livre déjà emprunté ou indisponible")
+        raise Conflit("Livre déjà emprunté ou indisponible")
     db.refresh(emprunt)
     return emprunt
 
@@ -60,13 +57,13 @@ def rendre(db: Session, utilisateur: Utilisateur, emprunt_id: int) -> Emprunt:
     """
     emprunt = db.scalar(select(Emprunt).where(Emprunt.id == emprunt_id).with_for_update())
     if emprunt is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Emprunt introuvable")
+        raise Introuvable("Emprunt introuvable")
     if emprunt.utilisateur_id != utilisateur.id and utilisateur.role != RoleUtilisateur.ADMIN:
         db.rollback()
-        raise HTTPException(status.HTTP_403_FORBIDDEN, "Cet emprunt ne vous appartient pas")
+        raise Interdit("Cet emprunt ne vous appartient pas")
     if emprunt.date_retour is not None:
         db.rollback()
-        raise HTTPException(status.HTTP_409_CONFLICT, "Ce livre a déjà été rendu")
+        raise Conflit("Ce livre a déjà été rendu")
 
     emprunt.date_retour = func.current_timestamp()
     emprunt.livre.disponible = True

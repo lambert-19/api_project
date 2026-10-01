@@ -91,14 +91,14 @@ Stack imposée : **Oracle + Python + FastAPI + SQLAlchemy + Alembic + Pydantic**
 - [x] (Bonus) Limite de 5 emprunts simultanés par utilisateur, `GET /loans/overdue` (retards, admin)
 
 ## Phase 5 : Fonctions FastAPI avancées (demandées par le prof)
-- [ ] **APIRouter** avec `prefix` et `tags` 📖 *Bigger Applications – Multiple Files*
-- [ ] **response_model** et **status_code** sur chaque route (201 création, 204 suppression) 📖 *Response Model*
-- [ ] **Lifespan events** : vérifier la connexion à la base au démarrage 📖 *Advanced → Lifespan Events*
-- [ ] **Middleware CORS** 📖 *CORS*
-- [ ] **Métadonnées Swagger** : titre, description, tags décrits, exemples dans les schémas (`json_schema_extra`)
+- [x] **APIRouter** avec `prefix` et `tags` 📖 *Bigger Applications – Multiple Files*
+- [x] **response_model** et **status_code** sur chaque route (201 création, 204 suppression) 📖 *Response Model*
+- [x] **Lifespan events** : vérifier la connexion à la base au démarrage (l'API refuse de démarrer si Oracle est injoignable) 📖 *Advanced → Lifespan Events*
+- [x] **Middleware CORS** (origines dans `CORS_ORIGINS`, méthodes et en-têtes limités) 📖 *CORS*
+- [x] **Métadonnées Swagger** : titre, description, tags décrits, exemples dans les schémas (`json_schema_extra`)
   📖 *Metadata and Docs URLs, Declare Request Example Data*
-- [ ] **Gestionnaires d'exceptions** personnalisés 📖 *Handling Errors*
-- [ ] (Bonus) **BackgroundTasks** : journaliser ou « envoyer » un mail de confirmation d'emprunt 📖 *Background Tasks*
+- [x] **Gestionnaires d'exceptions** personnalisés : erreurs métier (`src/exceptions.py`) et erreurs base (503/500 sans détail SQL) 📖 *Handling Errors*
+- [x] (Bonus) **BackgroundTasks** : « envoi » d'un mail de confirmation d'emprunt (journalisé) 📖 *Background Tasks*
 
 ## Phase 6 : Tests et qualité
 - [ ] Tests avec **TestClient** et pytest 📖 *Testing*

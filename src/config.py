@@ -46,6 +46,8 @@ class Settings(_DatabaseSettings):
     algorithm: str = "HS256"
     access_token_expire_minutes: int = 30
 
+    cors_origins: list[str] = ["http://localhost:3000", "http://127.0.0.1:3000"]
+
     @property
     def database_url(self) -> URL:
         """Connexion de l'API (utilisateur à droits limités)."""
