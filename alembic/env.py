@@ -21,6 +21,17 @@ target_metadata = Base.metadata
 # Les migrations s'exécutent avec le propriétaire du schéma (BIBLIO)
 settings = MigrationSettings()  # type: ignore[call-arg]
 
+# Index sur expression (CASE ...) : Alembic ne sait pas les comparer avec la base
+# et proposerait de les supprimer/recréer à chaque --autogenerate
+INDEX_FONCTIONNELS = {"uq_emprunt_livre_en_cours"}
+
+
+def include_object(objet, nom, type_, reflected, compare_to) -> bool:
+    """Ignore la comparaison d'un index fonctionnel déjà présent en base et dans les modèles."""
+    if type_ == "index" and nom in INDEX_FONCTIONNELS and compare_to is not None:
+        return False
+    return True
+
 
 def accorder_droits_api(connection: Connection) -> None:
     """Donne à l'API les droits de lecture/écriture sur toutes les tables du schéma.
@@ -61,7 +72,11 @@ def run_migrations_online() -> None:
     connectable = create_engine(settings.migration_url, poolclass=pool.NullPool)
 
     with connectable.connect() as connection:
-        context.configure(connection=connection, target_metadata=target_metadata)
+        context.configure(
+            connection=connection,
+            target_metadata=target_metadata,
+            include_object=include_object,
+        )
 
         with context.begin_transaction():
             context.run_migrations()
