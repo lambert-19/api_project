@@ -29,7 +29,6 @@ class Emprunt(Base):
         DateTime, server_default=func.current_timestamp()
     )
     date_retour_prevue: Mapped[date] = mapped_column(Date)
-    # NULL tant que le livre n'est pas rendu
     date_retour: Mapped[datetime | None] = mapped_column(DateTime)
 
     utilisateur: Mapped[Utilisateur] = relationship(back_populates="emprunts")
@@ -42,10 +41,6 @@ class Emprunt(Base):
         ),
     )
 
-
-# Garantie côté base : un livre n'a qu'un seul emprunt en cours.
-# Oracle n'indexe pas les clés entièrement NULL, donc seuls les emprunts
-# en cours (date_retour IS NULL) entrent dans cet index unique.
 Index(
     "uq_emprunt_livre_en_cours",
     case((Emprunt.date_retour.is_(None), Emprunt.livre_id)),

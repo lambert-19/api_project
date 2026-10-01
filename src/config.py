@@ -11,12 +11,8 @@ class _DatabaseSettings(BaseSettings):
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
-        # Chaque classe ne lit que ses propres variables et ignore les autres
-        # (ex. l'API ne charge jamais ORACLE_PASSWORD ni APP_USER_PASSWORD)
         extra="ignore",
     )
-
-    # Propriétaire du schéma : son nom sert aussi de nom de schéma
     app_user: str
     db_host: str = "127.0.0.1"
     db_port: int = 1521
@@ -28,7 +24,6 @@ class _DatabaseSettings(BaseSettings):
         return self.app_user.upper()
 
     def _url(self, user: str, password: SecretStr) -> URL:
-        # URL.create échappe les caractères spéciaux du mot de passe
         return URL.create(
             "oracle+oracledb",
             username=user,
@@ -71,4 +66,4 @@ class MigrationSettings(_DatabaseSettings):
 @lru_cache
 def get_settings() -> Settings:
     """Settings chargés une seule fois ; utilisable comme dépendance FastAPI (Depends(get_settings))."""
-    return Settings()  # type: ignore[call-arg]
+    return Settings() 

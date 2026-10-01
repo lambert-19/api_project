@@ -7,12 +7,10 @@ from config import get_settings
 
 settings = get_settings()
 
-# L'API se connecte avec BIBLIO_API (lecture/écriture seulement)
 engine = create_engine(
     settings.database_url,
-    pool_pre_ping=True,  # détecte les connexions coupées (ex. redémarrage d'Oracle)
+    pool_pre_ping=True, 
 )
-
 
 @event.listens_for(engine, "connect")
 def _utiliser_schema_proprietaire(dbapi_connection, _connection_record) -> None:

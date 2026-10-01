@@ -72,15 +72,15 @@ Stack imposée : **Oracle + Python + FastAPI + SQLAlchemy + Alembic + Pydantic**
 - [x] `GET /users/me` : profil de l'utilisateur connecté
 - [x] `GET /users/me/loans` : emprunts en cours
 - [x] `GET /users/me/history` : historique des emprunts
-- [ ] Créer un premier administrateur (l'inscription ne crée que des membres)
+- [x] Créer un premier administrateur : `uv run python src/creer_admin.py` (crée ou promeut)
 
 ## Phase 3 : Livres
-- [ ] Schémas `BookCreate`, `BookUpdate` (champs optionnels), `BookOut`
-- [ ] `POST /books` : ajout (admin)
-- [ ] `PATCH /books/{id}` : modification (admin) 📖 *Doc : Body – Updates (`model_dump(exclude_unset=True)`)*
-- [ ] `DELETE /books/{id}` : suppression (admin), refusée si le livre est emprunté
-- [ ] `GET /books/{id}` : détail, `HTTPException(404)` si introuvable
-- [ ] `GET /books?title=&author=&genre=&skip=&limit=` : recherche et pagination
+- [x] Schémas `LivreCreate`, `LivreUpdate` (champs optionnels, titre/auteur non nuls), `LivreOut`, ISBN-10/13 validé
+- [x] `POST /books` : ajout (admin), 409 si ISBN déjà utilisé
+- [x] `PATCH /books/{id}` : modification (admin), impossible de remettre disponible un livre emprunté 📖 *Doc : Body – Updates (`model_dump(exclude_unset=True)`)*
+- [x] `DELETE /books/{id}` : suppression (admin), refusée si le livre a un historique d'emprunts (le rendre indisponible à la place)
+- [x] `GET /books/{id}` : détail, `HTTPException(404)` si introuvable
+- [x] `GET /books?title=&author=&genre=&available=&skip=&limit=` : recherche insensible à la casse et pagination
   📖 *Doc : Query Parameters and String Validations (`Query(min_length=...)`)*
 
 ## Phase 4 : Emprunts

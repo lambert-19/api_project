@@ -5,8 +5,6 @@ from sqlalchemy.orm import DeclarativeBase
 class Base(DeclarativeBase):
     """Classe de base des modèles SQLAlchemy."""
 
-    # Noms de contraintes explicites et stables : indispensable pour qu'Alembic
-    # puisse les modifier ou les supprimer dans les migrations suivantes
     metadata = MetaData(
         naming_convention={
             "ix": "ix_%(table_name)s_%(column_0_name)s",
