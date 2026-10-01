@@ -19,6 +19,8 @@ class Livre(Base):
     # Index : recherche par titre et par auteur
     titre: Mapped[str] = mapped_column(String(255), index=True)
     auteur: Mapped[str] = mapped_column(String(255), index=True)
+    # Ajouté par la 2e migration : nullable car les livres existants n'en ont pas
+    genre: Mapped[str | None] = mapped_column(String(100), index=True)
     date_publication: Mapped[date | None] = mapped_column(Date)
     isbn: Mapped[str | None] = mapped_column(String(13), unique=True)
     # False tant qu'un emprunt est en cours

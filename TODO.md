@@ -48,7 +48,7 @@ Stack imposée : **Oracle + Python + FastAPI + SQLAlchemy + Alembic + Pydantic**
   - [x] À chaque connexion : `ALTER SESSION SET CURRENT_SCHEMA = BIBLIO` (les tables appartiennent à BIBLIO, pas à BIBLIO_API)
 - [x] Modèles SQLAlchemy (`src/models/utilisateur.py`, `livre.py`, `emprunt.py`) :
   - [x] **Utilisateur** : id, nom, email (unique), téléphone, mot_de_passe_hash, date_inscription, rôle (admin/membre, contrainte CHECK)
-  - [x] **Livre** : id, titre, auteur, date_publication, disponible (booléen), ISBN (unique) — `genre` volontairement réservé à la 2e migration
+  - [x] **Livre** : id, titre, auteur, date_publication, disponible (booléen), ISBN (unique), `genre` (ajouté par la 2e migration)
   - [x] **Emprunt** : id, utilisateur_id (FK), livre_id (FK), date_emprunt, date_retour_prevue, date_retour (null tant que le livre n'est pas rendu)
   - [x] Relations `relationship()`, contraintes et index (email unique, index sur titre/auteur, CHECK sur les dates)
   - [x] Index unique fonctionnel `uq_emprunt_livre_en_cours` : la base refuse deux emprunts en cours du même livre
@@ -59,7 +59,8 @@ Stack imposée : **Oracle + Python + FastAPI + SQLAlchemy + Alembic + Pydantic**
   - [x] Relue et corrigée (contrainte CHECK du rôle générée en double par Alembic)
   - [x] Vérifiée en BIBLIO_API : double emprunt, rôle invalide, email en double refusés ; CREATE/DROP TABLE refusés (ORA-01031)
   - [x] Réversible (`downgrade base` puis `upgrade head`), `alembic check` propre (index fonctionnel exclu de la comparaison dans `env.py`)
-- [ ] Une **deuxième migration** qui modifie le schéma (ex. ajout de `genre` ou `date_retour_prevue`) pour montrer l'évolution avec Alembic à la soutenance
+- [x] Une **deuxième migration** qui modifie le schéma : ajout de `livre.genre` (nullable, indexé) pour montrer l'évolution avec Alembic à la soutenance
+  - [x] Réversible (`downgrade -1` / `upgrade head`), recherche par genre testée
 
 ## Phase 2 : Utilisateurs et authentification
 - [ ] Schémas Pydantic : `UserCreate` (`EmailStr`, validation du téléphone), `UserOut` (sans mot de passe)
