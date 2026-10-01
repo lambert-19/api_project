@@ -46,15 +46,19 @@ Stack imposée : **Oracle + Python + FastAPI + SQLAlchemy + Alembic + Pydantic**
   - [x] `Base` avec convention de nommage des contraintes (pour Alembic)
   - [x] `/health` vérifie la base via `Depends(get_db)`
   - [x] À chaque connexion : `ALTER SESSION SET CURRENT_SCHEMA = BIBLIO` (les tables appartiennent à BIBLIO, pas à BIBLIO_API)
-- [ ] Modèles SQLAlchemy :
-  - [ ] **Utilisateur** : id, nom, email (unique), téléphone, mot_de_passe_hash, date_inscription, rôle (admin/membre)
-  - [ ] **Livre** : id, titre, auteur, genre, date_publication, disponible (booléen), éventuellement ISBN
-  - [ ] **Emprunt** : id, user_id (FK), livre_id (FK), date_emprunt, date_retour_prévue, date_retour (null tant que le livre n'est pas rendu)
-  - [ ] Relations `relationship()`, contraintes et index (email unique, index sur titre/auteur)
+- [x] Modèles SQLAlchemy (`src/models/utilisateur.py`, `livre.py`, `emprunt.py`) :
+  - [x] **Utilisateur** : id, nom, email (unique), téléphone, mot_de_passe_hash, date_inscription, rôle (admin/membre, contrainte CHECK)
+  - [x] **Livre** : id, titre, auteur, date_publication, disponible (booléen), ISBN (unique) — `genre` volontairement réservé à la 2e migration
+  - [x] **Emprunt** : id, utilisateur_id (FK), livre_id (FK), date_emprunt, date_retour_prevue, date_retour (null tant que le livre n'est pas rendu)
+  - [x] Relations `relationship()`, contraintes et index (email unique, index sur titre/auteur, CHECK sur les dates)
+  - [x] Index unique fonctionnel `uq_emprunt_livre_en_cours` : la base refuse deux emprunts en cours du même livre
 - [x] `alembic init alembic` et configurer `env.py` avec les modèles (`target_metadata`) et `MigrationSettings.migration_url`
   - [x] `Base` déplacée dans `models/base.py` ; config séparée API (`Settings`) / migrations (`MigrationSettings`)
   - [x] Après chaque migration : `GRANT SELECT, INSERT, UPDATE, DELETE` sur toutes les tables de BIBLIO à `BIBLIO_API_ROLE`
-- [ ] Première migration : `alembic revision --autogenerate -m "init"` puis `alembic upgrade head`
+- [x] Première migration : `alembic revision --autogenerate -m "init"` puis `alembic upgrade head`
+  - [x] Relue et corrigée (contrainte CHECK du rôle générée en double par Alembic)
+  - [x] Vérifiée en BIBLIO_API : double emprunt, rôle invalide, email en double refusés ; CREATE/DROP TABLE refusés (ORA-01031)
+  - [x] Réversible (`downgrade base` puis `upgrade head`), `alembic check` propre (index fonctionnel exclu de la comparaison dans `env.py`)
 - [ ] Une **deuxième migration** qui modifie le schéma (ex. ajout de `genre` ou `date_retour_prevue`) pour montrer l'évolution avec Alembic à la soutenance
 
 ## Phase 2 : Utilisateurs et authentification
