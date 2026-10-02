@@ -4,7 +4,7 @@ from pydantic import BaseModel, Field
 
 
 class Erreur(BaseModel):
-    """Réponse d'erreur standard (400, 401, 403, 404, 405, 409, 413, 429, 500, 503)."""
+    """Réponse d'erreur standard (400, 401, 403, 404, 405, 409, 412, 413, 429, 500, 503)."""
 
     detail: str = Field(description="Message d'erreur lisible")
 

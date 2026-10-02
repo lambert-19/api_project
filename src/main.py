@@ -86,9 +86,12 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins,
     allow_methods=["GET", "POST", "PATCH", "DELETE"],
-    allow_headers=["Authorization", "Content-Type", "X-Request-ID"],
+    allow_headers=["Authorization", "Content-Type", "X-Request-ID", "If-None-Match", "If-Match"],
     # En-têtes de réponse lisibles par le JavaScript d'un site autorisé
-    expose_headers=["X-Request-ID", "X-Process-Time", "Location", "Retry-After"],
+    expose_headers=[
+        "X-Request-ID", "X-Process-Time", "Location", "Retry-After",
+        "ETag", "X-Total-Count", "Link", "Content-Disposition",
+    ],
 )
 
 

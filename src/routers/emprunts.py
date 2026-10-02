@@ -1,10 +1,13 @@
+from datetime import date
+
 from fastapi import APIRouter, BackgroundTasks, status
+from fastapi.responses import StreamingResponse
 
 from dependances import Emprunteur, GestionnaireEmprunts, ScopesAccordes, SessionDb
 from models import Emprunt
 from reponses import NON_AUTHENTIFIE, erreur, permission_requise
 from schemas.emprunt import EmpruntAdminOut, EmpruntCreate, EmpruntOut
-from services import emprunts
+from services import emprunts, export
 from services.emprunts import MAX_EMPRUNTS_EN_COURS
 from services.notifications import confirmer_emprunt
 
@@ -64,3 +67,31 @@ def rendre_livre(emprunt_id: int, utilisateur: Emprunteur, scopes: ScopesAccorde
 def emprunts_en_retard(db: SessionDb, _: GestionnaireEmprunts) -> list[Emprunt]:
     """Emprunts non rendus dont la date de retour prévue est dépassée (administrateurs)."""
     return emprunts.emprunts_en_retard(db)
+
+
+@router.get(
+    "/export",
+    response_class=StreamingResponse,
+    responses={
+        200: {
+            "description": "Fichier CSV de tous les emprunts (séparateur « ; », UTF-8), téléchargé en pièce jointe",
+            "content": {
+                "text/csv": {
+                    "example": "id;emprunteur;email;livre;isbn;date_emprunt;date_retour_prevue;date_retour;statut\n"
+                    "1;Marie Curie;marie.curie@example.com;Dune;9782266320481;2026-10-01 10:00:00;2026-10-15;;en cours\n"
+                }
+            },
+        },
+        **permission_requise("emprunts:gerer"),
+    },
+)
+def exporter_emprunts(db: SessionDb, _: GestionnaireEmprunts) -> StreamingResponse:
+    """Export CSV de tous les emprunts (administrateurs), avec leur statut : en cours, en retard ou rendu.
+
+    Le fichier est envoyé ligne par ligne (`StreamingResponse`), sans être construit en mémoire.
+    """
+    return StreamingResponse(
+        export.lignes_csv(db),
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="emprunts_{date.today().isoformat()}.csv"'},
+    )
