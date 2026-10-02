@@ -46,6 +46,14 @@ def test_422_message_lisible_par_champ(client):
     }
 
 
+def test_422_parametre_de_recherche_inconnu(client):
+    """Modèle de paramètres avec extra="forbid" : une faute de frappe n'est pas ignorée."""
+    reponse = client.get("/books", params={"titel": "dune"})
+
+    assert reponse.status_code == 422
+    assert reponse.json()["erreurs"] == [{"emplacement": "query", "champ": "titel", "message": "Paramètre inconnu"}]
+
+
 def test_422_champs_obligatoires(client):
     reponse = client.post("/users/register", json={})
 
