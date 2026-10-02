@@ -4,14 +4,15 @@ from fastapi import APIRouter, HTTPException, Query, Request, Response, status
 from sqlalchemy import exists, func, select
 from sqlalchemy.exc import IntegrityError
 
-from dependances import AdminCourant, SessionDb
+from dependances import GestionnaireLivres, SessionDb
 from models import Emprunt, Livre
-from reponses import ADMIN_REQUIS, LIVRE_INTROUVABLE, creation, erreur
-from schemas.livre import LivreCreate, LivreOut, LivreUpdate
+from reponses import LIVRE_INTROUVABLE, creation, erreur, permission_requise
+from schemas.livre import FiltresLivres, LivreCreate, LivreOut, LivreUpdate
 
 router = APIRouter(prefix="/books", tags=["Livres"])
 
 ISBN_EN_DOUBLE = "Un livre avec cet ISBN existe déjà"
+ECRITURE_LIVRES = permission_requise("livres:ecrire")
 
 
 def _get_livre(db: SessionDb, livre_id: int) -> Livre:
@@ -37,26 +38,21 @@ def _commit_ou_conflit(db: SessionDb) -> None:
 
 
 @router.get("", response_model=list[LivreOut])
-def rechercher_livres(
-    db: SessionDb,
-    title: Annotated[str | None, Query(min_length=1, max_length=255, description="Partie du titre")] = None,
-    author: Annotated[str | None, Query(min_length=1, max_length=255, description="Partie du nom de l'auteur")] = None,
-    genre: Annotated[str | None, Query(min_length=1, max_length=100)] = None,
-    available: Annotated[bool | None, Query(description="Uniquement les livres disponibles (true) ou empruntés (false)")] = None,
-    skip: Annotated[int, Query(ge=0)] = 0,
-    limit: Annotated[int, Query(ge=1, le=100)] = 20,
-) -> list[Livre]:
-    """Recherche par titre, auteur ou genre (insensible à la casse), avec pagination."""
+def rechercher_livres(db: SessionDb, filtres: Annotated[FiltresLivres, Query()]) -> list[Livre]:
+    """Recherche par titre, auteur ou genre (insensible à la casse), avec pagination.
+
+    Un paramètre inconnu (faute de frappe comme `titel`) est refusé en 422 au lieu d'être ignoré.
+    """
     requete = select(Livre)
-    if title:
-        requete = requete.where(func.lower(Livre.titre).contains(title.lower()))
-    if author:
-        requete = requete.where(func.lower(Livre.auteur).contains(author.lower()))
-    if genre:
-        requete = requete.where(func.lower(Livre.genre) == genre.lower())
-    if available is not None:
-        requete = requete.where(Livre.disponible == available)
-    requete = requete.order_by(Livre.titre, Livre.id).offset(skip).limit(limit)
+    if filtres.title:
+        requete = requete.where(func.lower(Livre.titre).contains(filtres.title.lower()))
+    if filtres.author:
+        requete = requete.where(func.lower(Livre.auteur).contains(filtres.author.lower()))
+    if filtres.genre:
+        requete = requete.where(func.lower(Livre.genre) == filtres.genre.lower())
+    if filtres.available is not None:
+        requete = requete.where(Livre.disponible == filtres.available)
+    requete = requete.order_by(Livre.titre, Livre.id).offset(filtres.skip).limit(filtres.limit)
     return list(db.scalars(requete))
 
 
@@ -72,12 +68,12 @@ def detail_livre(livre_id: int, db: SessionDb) -> Livre:
     status_code=status.HTTP_201_CREATED,
     responses={
         **creation("Livre créé ; l'en-tête Location donne son URL"),
-        **ADMIN_REQUIS,
+        **ECRITURE_LIVRES,
         409: erreur("ISBN déjà utilisé par un autre livre", ISBN_EN_DOUBLE),
     },
 )
 def ajouter_livre(
-    donnees: LivreCreate, db: SessionDb, _: AdminCourant, request: Request, response: Response
+    donnees: LivreCreate, db: SessionDb, _: GestionnaireLivres, request: Request, response: Response
 ) -> Livre:
     """Ajout d'un livre (administrateurs)."""
     livre = Livre(**donnees.model_dump())
@@ -93,7 +89,7 @@ def ajouter_livre(
     response_model=LivreOut,
     responses={
         400: erreur("Aucun champ à modifier dans la requête", "Aucun champ à modifier"),
-        **ADMIN_REQUIS,
+        **ECRITURE_LIVRES,
         **LIVRE_INTROUVABLE,
         409: erreur(
             "Modification incompatible avec l'état du livre",
@@ -102,7 +98,7 @@ def ajouter_livre(
         ),
     },
 )
-def modifier_livre(livre_id: int, donnees: LivreUpdate, db: SessionDb, _: AdminCourant) -> Livre:
+def modifier_livre(livre_id: int, donnees: LivreUpdate, db: SessionDb, _: GestionnaireLivres) -> Livre:
     """Modification partielle d'un livre (administrateurs).
 
     Un livre emprunté ne peut pas être remis disponible : il faut enregistrer son retour.
@@ -125,7 +121,7 @@ def modifier_livre(livre_id: int, donnees: LivreUpdate, db: SessionDb, _: AdminC
     status_code=status.HTTP_204_NO_CONTENT,
     responses={
         204: {"description": "Livre supprimé (réponse sans contenu)"},
-        **ADMIN_REQUIS,
+        **ECRITURE_LIVRES,
         **LIVRE_INTROUVABLE,
         409: erreur(
             "Le livre a un historique d'emprunts",
@@ -133,7 +129,7 @@ def modifier_livre(livre_id: int, donnees: LivreUpdate, db: SessionDb, _: AdminC
         ),
     },
 )
-def supprimer_livre(livre_id: int, db: SessionDb, _: AdminCourant) -> None:
+def supprimer_livre(livre_id: int, db: SessionDb, _: GestionnaireLivres) -> None:
     """Suppression d'un livre (administrateurs).
 
     Refusée si le livre a déjà été emprunté, pour conserver l'historique des utilisateurs :

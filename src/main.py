@@ -11,6 +11,7 @@ from sqlalchemy.exc import DBAPIError, OperationalError, SQLAlchemyError
 from sqlalchemy.exc import TimeoutError as PoolTimeoutError
 from sqlalchemy.orm import Session
 from starlette.exceptions import HTTPException as StarletteHTTPException
+from starlette.middleware.base import BaseHTTPMiddleware
 
 from config import get_settings
 from database import engine, get_db
@@ -20,6 +21,7 @@ from gestion_erreurs import erreur_http, erreur_validation, personnaliser_openap
 from limite_taille import LimiteTailleRequete
 from reponses import erreur
 from routers import auth, emprunts, livres, utilisateurs
+from suivi_requetes import suivre_requete
 
 logger = logging.getLogger("uvicorn.error")
 settings = get_settings()
@@ -44,7 +46,13 @@ Gestion d'une bibliothèque en ligne : utilisateurs, livres et emprunts.
 **S'authentifier :** créer un compte avec `POST /users/register`, puis cliquer sur
 **Authorize** et se connecter avec son email et son mot de passe.
 
-Les routes d'ajout, de modification et de suppression des livres sont réservées aux administrateurs.
+**Permissions (scopes OAuth2) :** chaque route protégée exige une permission, indiquée par
+le cadenas. Un membre reçoit `profil` et `emprunts` ; un administrateur reçoit en plus
+`livres:ecrire` et `emprunts:gerer`. Sans case cochée dans **Authorize**, le jeton reçoit
+toutes les permissions du rôle.
+
+**Suivi :** chaque réponse contient `X-Request-ID` (à communiquer en cas de problème,
+il est repris dans les journaux du serveur) et `X-Process-Time` (durée de traitement, en secondes).
 
 **Codes de réponse :** <span>2xx succès</span> · <span>4xx erreur dans la requête</span> ·
 <span>5xx erreur du serveur</span>
@@ -70,13 +78,17 @@ app = FastAPI(
 )
 installer_documentation(app)
 
-# Ajouté avant CORS : CORS reste le plus externe, donc les réponses 413 ont aussi leurs en-têtes CORS
+# Le dernier ajouté est le plus externe : CORS -> suivi -> limite de taille -> routes.
+# Ainsi les réponses 413 ont aussi un X-Request-ID et leurs en-têtes CORS.
 app.add_middleware(LimiteTailleRequete, taille_max=settings.taille_max_requete)
+app.add_middleware(BaseHTTPMiddleware, dispatch=suivre_requete)  # équivaut à @app.middleware("http")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins,
     allow_methods=["GET", "POST", "PATCH", "DELETE"],
-    allow_headers=["Authorization", "Content-Type"],
+    allow_headers=["Authorization", "Content-Type", "X-Request-ID"],
+    # En-têtes de réponse lisibles par le JavaScript d'un site autorisé
+    expose_headers=["X-Request-ID", "X-Process-Time", "Location", "Retry-After"],
 )
 
 
@@ -93,7 +105,10 @@ async def erreur_metier(_: Request, exc: ErreurMetier) -> JSONResponse:
 @app.exception_handler(SQLAlchemyError)
 async def erreur_base(request: Request, exc: SQLAlchemyError) -> JSONResponse:
     """Journalise l'erreur complète, mais ne renvoie jamais de détail SQL au client."""
-    logger.exception("Erreur base de données sur %s %s", request.method, request.url.path)
+    logger.exception(
+        "Erreur base de données sur %s %s [id=%s]",
+        request.method, request.url.path, getattr(request.state, "request_id", "-"),
+    )
     if isinstance(exc, OperationalError | PoolTimeoutError) or (
         isinstance(exc, DBAPIError) and exc.connection_invalidated
     ):

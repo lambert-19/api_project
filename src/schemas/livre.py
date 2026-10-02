@@ -9,6 +9,25 @@ Genre = Annotated[str, Field(min_length=1, max_length=100)]
 Isbn = Annotated[str, Field(pattern=r"^(\d{9}[\dX]|\d{13})$")]
 
 
+class FiltresLivres(BaseModel):
+    """Paramètres de recherche de GET /books, regroupés dans un modèle.
+
+    📖 Doc FastAPI : Query Parameter Models. `extra="forbid"` : un paramètre inconnu
+    (ex. `?titel=dune`) est refusé en 422 au lieu d'être ignoré sans prévenir.
+    """
+
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    title: str | None = Field(default=None, min_length=1, max_length=255, description="Partie du titre")
+    author: str | None = Field(default=None, min_length=1, max_length=255, description="Partie du nom de l'auteur")
+    genre: str | None = Field(default=None, min_length=1, max_length=100, description="Genre exact")
+    available: bool | None = Field(
+        default=None, description="Uniquement les livres disponibles (true) ou empruntés (false)"
+    )
+    skip: int = Field(default=0, ge=0, description="Nombre de résultats à sauter (pagination)")
+    limit: int = Field(default=20, ge=1, le=100, description="Nombre maximum de résultats")
+
+
 class LivreCreate(BaseModel):
     model_config = ConfigDict(
         str_strip_whitespace=True,

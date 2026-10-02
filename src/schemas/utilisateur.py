@@ -49,3 +49,4 @@ class Jeton(BaseModel):
 
     access_token: str
     token_type: str = "bearer"
+    scope: str = Field(description="Permissions accordées, séparées par des espaces", examples=["emprunts profil"])

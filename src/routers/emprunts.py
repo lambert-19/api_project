@@ -1,8 +1,8 @@
 from fastapi import APIRouter, BackgroundTasks, status
 
-from dependances import AdminCourant, SessionDb, UtilisateurCourant
+from dependances import Emprunteur, GestionnaireEmprunts, ScopesAccordes, SessionDb
 from models import Emprunt
-from reponses import ADMIN_REQUIS, NON_AUTHENTIFIE, erreur
+from reponses import NON_AUTHENTIFIE, erreur, permission_requise
 from schemas.emprunt import EmpruntAdminOut, EmpruntCreate, EmpruntOut
 from services import emprunts
 from services.emprunts import MAX_EMPRUNTS_EN_COURS
@@ -16,7 +16,7 @@ router = APIRouter(prefix="/loans", tags=["Emprunts"])
     response_model=EmpruntOut,
     status_code=status.HTTP_201_CREATED,
     responses={
-        **NON_AUTHENTIFIE,
+        **permission_requise("emprunts"),
         404: erreur("Aucun livre avec cet identifiant", "Livre introuvable"),
         409: erreur(
             "Emprunt impossible",
@@ -27,7 +27,7 @@ router = APIRouter(prefix="/loans", tags=["Emprunts"])
 )
 def emprunter_livre(
     donnees: EmpruntCreate,
-    utilisateur: UtilisateurCourant,
+    utilisateur: Emprunteur,
     db: SessionDb,
     taches: BackgroundTasks,
 ) -> Emprunt:
@@ -45,17 +45,22 @@ def emprunter_livre(
     response_model=EmpruntOut,
     responses={
         **NON_AUTHENTIFIE,
-        403: erreur("L'emprunt appartient à un autre utilisateur", "Cet emprunt ne vous appartient pas"),
+        403: erreur(
+            "Permission manquante, ou emprunt d'un autre utilisateur sans la permission emprunts:gerer",
+            "Permission insuffisante : emprunts requis",
+            "Cet emprunt ne vous appartient pas",
+        ),
         404: erreur("Aucun emprunt avec cet identifiant", "Emprunt introuvable"),
         409: erreur("Le livre est déjà rendu", "Ce livre a déjà été rendu"),
     },
 )
-def rendre_livre(emprunt_id: int, utilisateur: UtilisateurCourant, db: SessionDb) -> Emprunt:
-    """Enregistre le retour d'un livre (par l'emprunteur ou un administrateur)."""
-    return emprunts.rendre(db, utilisateur, emprunt_id)
+def rendre_livre(emprunt_id: int, utilisateur: Emprunteur, scopes: ScopesAccordes, db: SessionDb) -> Emprunt:
+    """Enregistre le retour d'un livre : par l'emprunteur, ou par un utilisateur ayant
+    la permission `emprunts:gerer` (administrateurs)."""
+    return emprunts.rendre(db, utilisateur, emprunt_id, gere_tous_les_emprunts="emprunts:gerer" in scopes)
 
 
-@router.get("/overdue", response_model=list[EmpruntAdminOut], responses=ADMIN_REQUIS)
-def emprunts_en_retard(db: SessionDb, _: AdminCourant) -> list[Emprunt]:
+@router.get("/overdue", response_model=list[EmpruntAdminOut], responses=permission_requise("emprunts:gerer"))
+def emprunts_en_retard(db: SessionDb, _: GestionnaireEmprunts) -> list[Emprunt]:
     """Emprunts non rendus dont la date de retour prévue est dépassée (administrateurs)."""
     return emprunts.emprunts_en_retard(db)

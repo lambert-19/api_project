@@ -5,7 +5,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from exceptions import Conflit, Interdit, Introuvable
-from models import Emprunt, Livre, RoleUtilisateur, Utilisateur
+from models import Emprunt, Livre, Utilisateur
 
 DUREE_EMPRUNT_JOURS = 14
 MAX_EMPRUNTS_EN_COURS = 5
@@ -50,15 +50,16 @@ def emprunter(db: Session, utilisateur: Utilisateur, livre_id: int) -> Emprunt:
     return emprunt
 
 
-def rendre(db: Session, utilisateur: Utilisateur, emprunt_id: int) -> Emprunt:
+def rendre(db: Session, utilisateur: Utilisateur, emprunt_id: int, gere_tous_les_emprunts: bool) -> Emprunt:
     """Enregistre le retour et rend le livre de nouveau disponible, dans une seule transaction.
 
-    Seul l'emprunteur ou un administrateur peut enregistrer le retour.
+    Seul l'emprunteur, ou un utilisateur qui gère tous les emprunts (permission
+    emprunts:gerer), peut enregistrer le retour.
     """
     emprunt = db.scalar(select(Emprunt).where(Emprunt.id == emprunt_id).with_for_update())
     if emprunt is None:
         raise Introuvable("Emprunt introuvable")
-    if emprunt.utilisateur_id != utilisateur.id and utilisateur.role != RoleUtilisateur.ADMIN:
+    if emprunt.utilisateur_id != utilisateur.id and not gere_tous_les_emprunts:
         db.rollback()
         raise Interdit("Cet emprunt ne vous appartient pas")
     if emprunt.date_retour is not None:
