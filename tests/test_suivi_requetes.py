@@ -43,4 +43,5 @@ def test_en_tetes_lisibles_par_un_site_autorise(client):
     reponse = client.get("/books", headers={"Origin": "http://localhost:3000"})
 
     exposes = reponse.headers["access-control-expose-headers"].lower()
-    assert "x-request-id" in exposes and "x-process-time" in exposes and "location" in exposes
+    for en_tete in ("x-request-id", "x-process-time", "location", "etag", "x-total-count", "link"):
+        assert en_tete in exposes
