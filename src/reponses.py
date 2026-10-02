@@ -46,9 +46,11 @@ NON_AUTHENTIFIE = {
     )
 }
 
-ADMIN_REQUIS = {
-    **NON_AUTHENTIFIE,
-    403: erreur("L'utilisateur connecté n'est pas administrateur", "Réservé aux administrateurs"),
-}
+def permission_requise(scope: str) -> dict[int, dict[str, Any]]:
+    """401 si pas authentifié, 403 si le jeton n'a pas la permission `scope`."""
+    return {
+        **NON_AUTHENTIFIE,
+        403: erreur(f"Le jeton n'a pas la permission « {scope} »", f"Permission insuffisante : {scope} requis"),
+    }
 
 LIVRE_INTROUVABLE = {404: erreur("Aucun livre avec cet identifiant", "Livre introuvable")}

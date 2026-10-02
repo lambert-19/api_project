@@ -1,3 +1,5 @@
+from collections.abc import Iterable
+from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 
 import jwt
@@ -21,19 +23,26 @@ def verifier_mot_de_passe(mot_de_passe: str, hash_: str | None) -> bool:
     return _hasher.verify(mot_de_passe, hash_)
 
 
-def creer_jeton(utilisateur_id: int) -> str:
-    """JWT signé contenant l'id de l'utilisateur (`sub`) et sa date d'expiration (`exp`)."""
+@dataclass(frozen=True)
+class JetonLu:
+    utilisateur_id: int
+    scopes: frozenset[str]
+
+
+def creer_jeton(utilisateur_id: int, scopes: Iterable[str]) -> str:
+    """JWT signé contenant l'id de l'utilisateur (`sub`), ses permissions (`scope`,
+    séparées par des espaces, format OAuth2) et sa date d'expiration (`exp`)."""
     settings = get_settings()
     expiration = datetime.now(UTC) + timedelta(minutes=settings.access_token_expire_minutes)
     return jwt.encode(
-        {"sub": str(utilisateur_id), "exp": expiration},
+        {"sub": str(utilisateur_id), "scope": " ".join(sorted(scopes)), "exp": expiration},
         settings.secret_key.get_secret_value(),
         algorithm=settings.algorithm,
     )
 
 
-def lire_jeton(jeton: str) -> int | None:
-    """Renvoie l'id de l'utilisateur, ou None si le jeton est invalide, falsifié ou expiré."""
+def lire_jeton(jeton: str) -> JetonLu | None:
+    """Renvoie l'id de l'utilisateur et ses permissions, ou None si le jeton est invalide, falsifié ou expiré."""
     settings = get_settings()
     try:
         payload = jwt.decode(
@@ -42,6 +51,9 @@ def lire_jeton(jeton: str) -> int | None:
             algorithms=[settings.algorithm],
             options={"require": ["sub", "exp"]},
         )
-        return int(payload["sub"])
+        scope = payload.get("scope", "")
+        if not isinstance(scope, str):
+            return None
+        return JetonLu(int(payload["sub"]), frozenset(scope.split()))
     except (jwt.InvalidTokenError, ValueError):
         return None

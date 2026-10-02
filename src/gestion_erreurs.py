@@ -72,6 +72,8 @@ def _message_validation(err: dict[str, Any]) -> str:
             return "JSON invalide"
         case "model_attributes_type" | "dict_type" | "model_type":
             return "Objet JSON attendu"
+        case "extra_forbidden":
+            return "Paramètre inconnu"
         case "value_error":
             message = err["msg"].removeprefix("Value error, ")
             return "Adresse email invalide" if "email address" in message else message
