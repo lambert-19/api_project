@@ -1,19 +1,29 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Header, HTTPException, Query, Request, Response, status
+from fastapi import APIRouter, File, Header, HTTPException, Query, Request, Response, UploadFile, status
 from sqlalchemy import ColumnElement, exists, func, select
 from sqlalchemy.exc import IntegrityError
 
-from dependances import GestionnaireLivres, SessionDb
-from etag import correspond, etag_de
-from models import Emprunt, Livre
-from reponses import LIVRE_INTROUVABLE, creation, erreur, permission_requise
+from dependances import SessionDb, permission
+from etag import correspond, etag_de, etag_octets
+from models import Couverture, Emprunt, Livre
+from services import couvertures
+from reponses import LIVRE_INTROUVABLE, admin_requis, creation, erreur
 from schemas.livre import FiltresLivres, LivreCreate, LivreOut, LivreUpdate
 
+# Consultation publique : /v1/books
 router = APIRouter(prefix="/books", tags=["Livres"])
 
+# Gestion de l'inventaire : /v1/admin/books (inclus dans routers/admin.py).
+# La permission est exigée une seule fois, pour toutes les routes de ce routeur,
+# et ses codes 401 / 403 sont documentés une seule fois aussi.
+router_admin = APIRouter(
+    prefix="/books",
+    dependencies=[permission("livres:ecrire")],
+    responses=admin_requis("livres:ecrire"),
+)
+
 ISBN_EN_DOUBLE = "Un livre avec cet ISBN existe déjà"
-ECRITURE_LIVRES = permission_requise("livres:ecrire")
 
 
 def _en_tete(description: str, type_: str = "string") -> dict:
@@ -136,19 +146,49 @@ def detail_livre(
     return livre
 
 
-@router.post(
+@router.get(
+    "/{livre_id}/cover",
+    response_class=Response,
+    responses={
+        200: {
+            "description": "Image de couverture (JPEG, PNG ou WebP), avec son ETag",
+            "content": {"image/jpeg": {}, "image/png": {}, "image/webp": {}},
+        },
+        304: {"description": "Not Modified : l'image n'a pas changé depuis l'ETag envoyé"},
+        404: erreur("Livre introuvable, ou livre sans couverture", "Livre introuvable", "Ce livre n'a pas de couverture"),
+    },
+)
+def couverture_livre(
+    livre_id: int,
+    db: SessionDb,
+    if_none_match: Annotated[str | None, Header(description="ETag de l'image déjà téléchargée")] = None,
+) -> Response:
+    """Image de couverture d'un livre. Son URL est donnée par `couverture_url` dans le livre."""
+    _get_livre(db, livre_id)
+    couverture = db.get(Couverture, livre_id)
+    if couverture is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Ce livre n'a pas de couverture")
+    entetes = {
+        "ETag": etag_octets(couverture.contenu),
+        "Cache-Control": "no-cache",
+        # Le navigateur ne doit jamais « deviner » un autre type que celui annoncé
+        "X-Content-Type-Options": "nosniff",
+    }
+    if correspond(if_none_match, entetes["ETag"], comparaison_faible=True):
+        return Response(status_code=status.HTTP_304_NOT_MODIFIED, headers=entetes)
+    return Response(couverture.contenu, media_type=couverture.type_mime, headers=entetes)
+
+
+@router_admin.post(
     "",
     response_model=LivreOut,
     status_code=status.HTTP_201_CREATED,
     responses={
         **creation("Livre créé ; l'en-tête Location donne son URL"),
-        **ECRITURE_LIVRES,
         409: erreur("ISBN déjà utilisé par un autre livre", ISBN_EN_DOUBLE),
     },
 )
-def ajouter_livre(
-    donnees: LivreCreate, db: SessionDb, _: GestionnaireLivres, request: Request, response: Response
-) -> Livre:
+def ajouter_livre(donnees: LivreCreate, db: SessionDb, request: Request, response: Response) -> Livre:
     """Ajout d'un livre (administrateurs)."""
     livre = Livre(**donnees.model_dump())
     db.add(livre)
@@ -162,13 +202,12 @@ def ajouter_livre(
 MODIFIE_ENTRE_TEMPS = "Le livre a été modifié entre-temps : le relire (GET) puis réessayer"
 
 
-@router.patch(
+@router_admin.patch(
     "/{livre_id}",
     response_model=LivreOut,
     responses={
         200: {"description": "Livre modifié", "headers": {"ETag": _en_tete("Nouvel ETag du livre")}},
         400: erreur("Aucun champ à modifier dans la requête", "Aucun champ à modifier"),
-        **ECRITURE_LIVRES,
         **LIVRE_INTROUVABLE,
         409: erreur(
             "Modification incompatible avec l'état du livre",
@@ -182,7 +221,6 @@ def modifier_livre(
     livre_id: int,
     donnees: LivreUpdate,
     db: SessionDb,
-    _: GestionnaireLivres,
     response: Response,
     if_match: Annotated[
         str | None,
@@ -193,7 +231,7 @@ def modifier_livre(
 
     Un livre emprunté ne peut pas être remis disponible : il faut enregistrer son retour.
 
-    **Concurrence optimiste** : envoyer dans `If-Match` l'ETag obtenu avec `GET /books/{id}`.
+    **Concurrence optimiste** : envoyer dans `If-Match` l'ETag obtenu avec `GET /v1/books/{id}`.
     Si un autre administrateur a modifié le livre entre-temps, la réponse est `412` et rien
     n'est écrasé.
     """
@@ -217,12 +255,11 @@ def modifier_livre(
     return livre
 
 
-@router.delete(
+@router_admin.delete(
     "/{livre_id}",
     status_code=status.HTTP_204_NO_CONTENT,
     responses={
         204: {"description": "Livre supprimé (réponse sans contenu)"},
-        **ECRITURE_LIVRES,
         **LIVRE_INTROUVABLE,
         409: erreur(
             "Le livre a un historique d'emprunts",
@@ -230,7 +267,7 @@ def modifier_livre(
         ),
     },
 )
-def supprimer_livre(livre_id: int, db: SessionDb, _: GestionnaireLivres) -> None:
+def supprimer_livre(livre_id: int, db: SessionDb) -> None:
     """Suppression d'un livre (administrateurs).
 
     Refusée si le livre a déjà été emprunté, pour conserver l'historique des utilisateurs :
@@ -244,3 +281,55 @@ def supprimer_livre(livre_id: int, db: SessionDb, _: GestionnaireLivres) -> None
         )
     db.delete(livre)
     db.commit()
+
+
+@router_admin.put(
+    "/{livre_id}/cover",
+    response_model=LivreOut,
+    responses={
+        **LIVRE_INTROUVABLE,
+        400: erreur("Fichier vide", "Fichier vide"),
+        413: erreur(
+            "Image trop volumineuse",
+            f"Image trop volumineuse (maximum {couvertures.TAILLE_MAX_COUVERTURE // 1024} Ko)",
+        ),
+        415: erreur(
+            "Le fichier n'est pas une image JPEG, PNG ou WebP",
+            "Format non supporté : image JPEG, PNG ou WebP attendue",
+        ),
+    },
+)
+def envoyer_couverture(
+    livre_id: int,
+    fichier: Annotated[UploadFile, File(description="Image JPEG, PNG ou WebP, 500 Ko maximum")],
+    db: SessionDb,
+) -> Livre:
+    """Ajoute ou remplace la couverture d'un livre (administrateurs).
+
+    Le format est vérifié d'après le contenu réel du fichier, pas d'après son nom
+    ou le type annoncé : un fichier renommé en `.jpg` est refusé (`415`).
+    """
+    livre = _get_livre(db, livre_id)
+    contenu, type_mime = couvertures.lire_image(fichier.file)
+    couvertures.enregistrer(db, livre_id, contenu, type_mime)
+    db.refresh(livre)  # met à jour couverture_url
+    return livre
+
+
+@router_admin.delete(
+    "/{livre_id}/cover",
+    status_code=status.HTTP_204_NO_CONTENT,
+    responses={
+        204: {"description": "Couverture supprimée"},
+        404: erreur("Livre introuvable, ou livre sans couverture", "Livre introuvable", "Ce livre n'a pas de couverture"),
+    },
+)
+def supprimer_couverture(livre_id: int, db: SessionDb) -> None:
+    """Supprime la couverture d'un livre (administrateurs)."""
+    livre = _get_livre(db, livre_id)
+    couverture = db.get(Couverture, livre_id)
+    if couverture is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Ce livre n'a pas de couverture")
+    db.delete(couverture)
+    db.commit()
+    db.expire(livre, ["nb_couvertures"])  # recalculé à la prochaine lecture (couverture_url -> null)

@@ -3,15 +3,24 @@ from datetime import date
 from fastapi import APIRouter, BackgroundTasks, status
 from fastapi.responses import StreamingResponse
 
-from dependances import Emprunteur, GestionnaireEmprunts, ScopesAccordes, SessionDb
+from dependances import Emprunteur, ScopesAccordes, SessionDb, permission
 from models import Emprunt
-from reponses import NON_AUTHENTIFIE, erreur, permission_requise
+from reponses import NON_AUTHENTIFIE, admin_requis, erreur, permission_requise
 from schemas.emprunt import EmpruntAdminOut, EmpruntCreate, EmpruntOut
 from services import emprunts, export
 from services.emprunts import MAX_EMPRUNTS_EN_COURS
 from services.notifications import confirmer_emprunt
 
+# Emprunts de l'utilisateur connecté : /v1/loans
 router = APIRouter(prefix="/loans", tags=["Emprunts"])
+
+# Supervision de tous les emprunts : /v1/admin/loans (inclus dans routers/admin.py),
+# permission exigée une seule fois pour tout le routeur
+router_admin = APIRouter(
+    prefix="/loans",
+    dependencies=[permission("emprunts:gerer")],
+    responses=admin_requis("emprunts:gerer"),
+)
 
 
 @router.post(
@@ -63,13 +72,13 @@ def rendre_livre(emprunt_id: int, utilisateur: Emprunteur, scopes: ScopesAccorde
     return emprunts.rendre(db, utilisateur, emprunt_id, gere_tous_les_emprunts="emprunts:gerer" in scopes)
 
 
-@router.get("/overdue", response_model=list[EmpruntAdminOut], responses=permission_requise("emprunts:gerer"))
-def emprunts_en_retard(db: SessionDb, _: GestionnaireEmprunts) -> list[Emprunt]:
+@router_admin.get("/overdue", response_model=list[EmpruntAdminOut])
+def emprunts_en_retard(db: SessionDb) -> list[Emprunt]:
     """Emprunts non rendus dont la date de retour prévue est dépassée (administrateurs)."""
     return emprunts.emprunts_en_retard(db)
 
 
-@router.get(
+@router_admin.get(
     "/export",
     response_class=StreamingResponse,
     responses={
@@ -82,10 +91,9 @@ def emprunts_en_retard(db: SessionDb, _: GestionnaireEmprunts) -> list[Emprunt]:
                 }
             },
         },
-        **permission_requise("emprunts:gerer"),
     },
 )
-def exporter_emprunts(db: SessionDb, _: GestionnaireEmprunts) -> StreamingResponse:
+def exporter_emprunts(db: SessionDb) -> StreamingResponse:
     """Export CSV de tous les emprunts (administrateurs), avec leur statut : en cours, en retard ou rendu.
 
     Le fichier est envoyé ligne par ligne (`StreamingResponse`), sans être construit en mémoire.

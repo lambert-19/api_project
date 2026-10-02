@@ -1,7 +1,9 @@
 from datetime import date
 from typing import Annotated, Self
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, computed_field, model_validator
+
+from config import PREFIXE_API
 
 Titre = Annotated[str, Field(min_length=1, max_length=255)]
 Auteur = Annotated[str, Field(min_length=1, max_length=255)]
@@ -84,3 +86,10 @@ class LivreOut(BaseModel):
     date_publication: date | None
     isbn: str | None
     disponible: bool
+    nb_couvertures: int = Field(default=0, exclude=True)  # interne : sert à calculer couverture_url
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def couverture_url(self) -> str | None:
+        """URL de l'image de couverture, ou null si le livre n'en a pas."""
+        return f"{PREFIXE_API}/books/{self.id}/cover" if self.nb_couvertures else None
