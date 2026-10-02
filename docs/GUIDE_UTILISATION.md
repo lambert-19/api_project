@@ -187,6 +187,10 @@ docker compose stop api
 | http://127.0.0.1:8000/docs | **Documentation interactive (Swagger)** : liste des routes, bouton *Try it out* pour les tester |
 | http://127.0.0.1:8000/redoc | Documentation en lecture seule |
 | http://127.0.0.1:8000/health | État de l'API et de la base |
+| http://127.0.0.1:8000/v1/... | **Routes de l'API** : toutes préfixées par `/v1` (ex. http://127.0.0.1:8000/v1/books) |
+| http://127.0.0.1:8000/v1/admin/... | Routes de gestion (inventaire, retards, export CSV), réservées aux administrateurs |
+
+> Une ancienne URL sans `/v1` (ex. `/books`) répond `404 Route introuvable`.
 
 **Tester que tout fonctionne :** ouvrir http://127.0.0.1:8000/health.
 
@@ -195,6 +199,24 @@ docker compose stop api
 | `{"status":"ok","database":"ok"}` | Tout fonctionne |
 | `503 Base de données injoignable` | L'API tourne mais Oracle ne répond pas : voir [2.2](#22-vérifier-que-tout-tourne) |
 | La page ne s'ouvre pas | L'API n'est pas lancée |
+
+### 3.4 Se connecter dans Swagger
+
+1. Ouvrir http://127.0.0.1:8000/docs et cliquer sur **Authorize** (cadenas en haut à droite).
+2. Remplir **username** (l'email) et **password**.
+3. **Scopes** : ne rien cocher pour recevoir toutes les permissions de son rôle. Cocher seulement certaines cases pour obtenir un jeton restreint (par exemple `profil` seul : lecture seule).
+4. Cliquer **Authorize**, puis **Close**. Le jeton est envoyé automatiquement à chaque *Try it out*.
+
+| Permission | Membre | Admin | Routes |
+|---|:---:|:---:|---|
+| `profil` | ✅ | ✅ | `/v1/users/me`, `/v1/users/me/loans`, `/v1/users/me/history` |
+| `emprunts` | ✅ | ✅ | `POST /v1/loans`, `POST /v1/loans/{id}/return` |
+| `livres:ecrire` | ❌ | ✅ | `POST`, `PATCH`, `DELETE /v1/admin/books`, `PUT`, `DELETE /v1/admin/books/{id}/cover` |
+| `emprunts:gerer` | ❌ | ✅ | `GET /v1/admin/loans/overdue`, retour de l'emprunt d'un autre |
+
+Une réponse `403 Permission insuffisante : … requis` signifie que le jeton n'a pas la permission : se reconnecter sans restreindre les cases, ou avec un compte administrateur.
+
+> En cas de problème, chaque réponse contient un en-tête **`X-Request-ID`** (visible dans *Response headers* de Swagger). Le communiquer permet de retrouver la ligne correspondante dans les journaux du serveur.
 
 ---
 

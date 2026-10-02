@@ -23,10 +23,10 @@ def _jeton(payload: dict, cle: str | None, algorithme: str) -> dict[str, str]:
 def test_connexion_bloquee_apres_5_echecs(client, membre):
     utilisateur, _ = membre
     for _ in range(5):
-        reponse = client.post("/auth/token", data={"username": utilisateur.email, "password": "faux"})
+        reponse = client.post("/v1/auth/token", data={"username": utilisateur.email, "password": "faux"})
         assert reponse.status_code == 401
 
-    bloquee = client.post("/auth/token", data={"username": utilisateur.email, "password": MOT_DE_PASSE})
+    bloquee = client.post("/v1/auth/token", data={"username": utilisateur.email, "password": MOT_DE_PASSE})
 
     assert bloquee.status_code == 429
     assert int(bloquee.headers["Retry-After"]) > 0
@@ -35,7 +35,7 @@ def test_connexion_bloquee_apres_5_echecs(client, membre):
 def test_connexions_reussies_jamais_bloquees(client, membre):
     utilisateur, _ = membre
     for _ in range(10):
-        reponse = client.post("/auth/token", data={"username": utilisateur.email, "password": MOT_DE_PASSE})
+        reponse = client.post("/v1/auth/token", data={"username": utilisateur.email, "password": MOT_DE_PASSE})
         assert reponse.status_code == 200
 
 
@@ -47,21 +47,21 @@ def test_injection_sql_dans_la_recherche(client, creer_livre, injection):
     creer_livre()
 
     for parametre in ("title", "author", "genre"):
-        reponse = client.get("/books", params={parametre: injection})
+        reponse = client.get("/v1/books", params={parametre: injection})
         assert reponse.status_code == 200
         assert reponse.json() == []
 
 
 @pytest.mark.parametrize("injection", INJECTIONS)
 def test_injection_sql_a_la_connexion(client, membre, injection):
-    reponse = client.post("/auth/token", data={"username": injection, "password": injection})
+    reponse = client.post("/v1/auth/token", data={"username": injection, "password": injection})
 
     assert reponse.status_code == 401
 
 
 def test_injection_sql_stockee_comme_du_texte(client, db, admin):
     _, entetes = admin
-    reponse = client.post("/books", json={"titre": INJECTIONS[1], "auteur": "X"}, headers=entetes)
+    reponse = client.post("/v1/admin/books", json={"titre": INJECTIONS[1], "auteur": "X"}, headers=entetes)
 
     assert reponse.status_code == 201
     assert db.get(Livre, reponse.json()["id"]).titre == INJECTIONS[1]
@@ -75,7 +75,7 @@ def test_jeton_non_signe_alg_none_refuse(client, membre):
     utilisateur, _ = membre
     entetes = _jeton({"sub": str(utilisateur.id), "exp": datetime.now(UTC) + timedelta(minutes=5)}, None, "none")
 
-    assert client.get("/users/me", headers=entetes).status_code == 401
+    assert client.get("/v1/users/me", headers=entetes).status_code == 401
 
 
 def test_jeton_modifie_pour_usurper_un_admin(client, membre, admin):
@@ -84,7 +84,7 @@ def test_jeton_modifie_pour_usurper_un_admin(client, membre, admin):
     entete, _, signature = entetes_membre["Authorization"].removeprefix("Bearer ").split(".")
     faux_contenu = jwt.utils.base64url_encode(f'{{"sub":"{admin_utilisateur.id}","exp":9999999999}}'.encode()).decode()
 
-    reponse = client.get("/users/me", headers={"Authorization": f"Bearer {entete}.{faux_contenu}.{signature}"})
+    reponse = client.get("/v1/users/me", headers={"Authorization": f"Bearer {entete}.{faux_contenu}.{signature}"})
 
     assert reponse.status_code == 401
 
@@ -95,7 +95,7 @@ def test_jeton_avec_utilisateur_invalide(client, payload):
     payload = {**payload, "exp": datetime.now(UTC) + timedelta(minutes=5)}
     entetes = _jeton(payload, settings.secret_key.get_secret_value(), settings.algorithm)
 
-    assert client.get("/users/me", headers=entetes).status_code == 401
+    assert client.get("/v1/users/me", headers=entetes).status_code == 401
 
 
 # --- Mots de passe -----------------------------------------------------------
@@ -103,7 +103,7 @@ def test_jeton_avec_utilisateur_invalide(client, payload):
 
 def test_mot_de_passe_stocke_hashe_avec_argon2(client, db):
     client.post(
-        "/users/register",
+        "/v1/users/register",
         json={"nom": "A", "email": "hash@test.example", "mot_de_passe": "motdepasse-clair"},
     )
     utilisateur = db.scalar(select(Utilisateur).where(Utilisateur.email == "hash@test.example"))
@@ -114,7 +114,7 @@ def test_mot_de_passe_stocke_hashe_avec_argon2(client, db):
 
 def test_meme_mot_de_passe_hashs_differents(client, db):
     for email in ("sel1@test.example", "sel2@test.example"):
-        client.post("/users/register", json={"nom": "A", "email": email, "mot_de_passe": "identique123"})
+        client.post("/v1/users/register", json={"nom": "A", "email": email, "mot_de_passe": "identique123"})
     hashs = db.scalars(select(Utilisateur.mot_de_passe_hash).where(Utilisateur.email.like("sel%@test.example")))
 
     assert len(set(hashs)) == 2

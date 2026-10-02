@@ -15,11 +15,11 @@ def test_route_inexistante_404_en_francais(client):
 
 
 def test_404_metier_garde_son_message(client):
-    assert client.get("/books/999999999").json() == {"detail": "Livre introuvable"}
+    assert client.get("/v1/books/999999999").json() == {"detail": "Livre introuvable"}
 
 
 def test_mauvaise_methode_405_en_francais(client):
-    reponse = client.put("/books")
+    reponse = client.put("/v1/books")
 
     assert reponse.status_code == 405
     assert reponse.json()["detail"].startswith("Méthode PUT non autorisée sur cette route")
@@ -27,7 +27,7 @@ def test_mauvaise_methode_405_en_francais(client):
 
 
 def test_sans_jeton_401_en_francais(client):
-    reponse = client.get("/users/me")
+    reponse = client.get("/v1/users/me")
 
     assert reponse.status_code == 401
     assert reponse.json()["detail"].startswith("Authentification requise")
@@ -35,7 +35,7 @@ def test_sans_jeton_401_en_francais(client):
 
 
 def test_422_message_lisible_par_champ(client):
-    reponse = client.get("/books", params={"limit": 500})
+    reponse = client.get("/v1/books", params={"limit": 500})
 
     assert reponse.status_code == 422
     assert reponse.json() == {
@@ -48,14 +48,14 @@ def test_422_message_lisible_par_champ(client):
 
 def test_422_parametre_de_recherche_inconnu(client):
     """Modèle de paramètres avec extra="forbid" : une faute de frappe n'est pas ignorée."""
-    reponse = client.get("/books", params={"titel": "dune"})
+    reponse = client.get("/v1/books", params={"titel": "dune"})
 
     assert reponse.status_code == 422
     assert reponse.json()["erreurs"] == [{"emplacement": "query", "champ": "titel", "message": "Paramètre inconnu"}]
 
 
 def test_422_champs_obligatoires(client):
-    reponse = client.post("/users/register", json={})
+    reponse = client.post("/v1/users/register", json={})
 
     erreurs = {e["champ"]: e["message"] for e in reponse.json()["erreurs"]}
     assert erreurs == {"nom": "Champ obligatoire", "email": "Champ obligatoire", "mot_de_passe": "Champ obligatoire"}
@@ -65,7 +65,7 @@ def test_422_validateur_metier_sans_champ(client, admin, creer_livre):
     _, entetes = admin
     livre = creer_livre()
 
-    reponse = client.patch(f"/books/{livre.id}", json={"titre": None}, headers=entetes)
+    reponse = client.patch(f"/v1/admin/books/{livre.id}", json={"titre": None}, headers=entetes)
 
     assert reponse.status_code == 422
     assert reponse.json()["erreurs"] == [
@@ -77,7 +77,7 @@ def test_patch_sans_modification_400(client, admin, creer_livre):
     _, entetes = admin
     livre = creer_livre()
 
-    reponse = client.patch(f"/books/{livre.id}", json={}, headers=entetes)
+    reponse = client.patch(f"/v1/admin/books/{livre.id}", json={}, headers=entetes)
 
     assert reponse.status_code == 400
     assert reponse.json() == {"detail": "Aucun champ à modifier"}
@@ -86,26 +86,26 @@ def test_patch_sans_modification_400(client, admin, creer_livre):
 def test_creation_livre_201_avec_location(client, admin):
     _, entetes = admin
 
-    reponse = client.post("/books", json=DUNE, headers=entetes)
+    reponse = client.post("/v1/admin/books", json=DUNE, headers=entetes)
 
     assert reponse.status_code == 201
-    assert reponse.headers["location"] == f"/books/{reponse.json()['id']}"
+    assert reponse.headers["location"] == f"/v1/books/{reponse.json()['id']}"
     assert client.get(reponse.headers["location"]).json()["titre"] == "Dune"
 
 
 def test_inscription_201_avec_location(client):
     reponse = client.post(
-        "/users/register",
+        "/v1/users/register",
         json={"nom": "Ada", "email": "ada@test.example", "mot_de_passe": "lovelace1815"},
     )
 
     assert reponse.status_code == 201
-    assert reponse.headers["location"] == "/users/me"
+    assert reponse.headers["location"] == "/v1/users/me"
 
 
 def test_corps_trop_gros_413_avec_content_length(client):
     reponse = client.post(
-        "/users/register",
+        "/v1/users/register",
         content=b"x" * (TAILLE_MAX + 1),
         headers={"Content-Type": "application/json"},
     )
@@ -118,7 +118,7 @@ def test_corps_trop_gros_413_sans_content_length(client):
     """Envoi « chunked » : pas de Content-Length, les octets sont comptés pendant la lecture."""
     morceaux = iter([b"x" * TAILLE_MAX, b"x"])
 
-    reponse = client.post("/users/register", content=morceaux, headers={"Content-Type": "application/json"})
+    reponse = client.post("/v1/users/register", content=morceaux, headers={"Content-Type": "application/json"})
 
     assert reponse.status_code == 413
 
@@ -126,7 +126,7 @@ def test_corps_trop_gros_413_sans_content_length(client):
 def test_corps_juste_sous_la_limite_accepte(client):
     """Juste sous la limite : la requête passe le middleware (puis échoue en 422, JSON invalide)."""
     reponse = client.post(
-        "/users/register",
+        "/v1/users/register",
         content=b"x" * TAILLE_MAX,
         headers={"Content-Type": "application/json"},
     )

@@ -31,7 +31,7 @@ def test_identifiant_du_client_invalide_remplace(client):
 def test_present_aussi_sur_les_erreurs(client):
     assert "x-request-id" in client.get("/route-inexistante").headers
     trop_gros = client.post(
-        "/users/register",
+        "/v1/users/register",
         content=b"x" * (get_settings().taille_max_requete + 1),
         headers={"Content-Type": "application/json"},
     )
@@ -40,7 +40,7 @@ def test_present_aussi_sur_les_erreurs(client):
 
 
 def test_en_tetes_lisibles_par_un_site_autorise(client):
-    reponse = client.get("/books", headers={"Origin": "http://localhost:3000"})
+    reponse = client.get("/v1/books", headers={"Origin": "http://localhost:3000"})
 
     exposes = reponse.headers["access-control-expose-headers"].lower()
     for en_tete in ("x-request-id", "x-process-time", "location", "etag", "x-total-count", "link"):

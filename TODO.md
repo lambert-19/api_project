@@ -85,10 +85,26 @@ Stack imposée : **Oracle + Python + FastAPI + SQLAlchemy + Alembic + Pydantic**
 - [x] **Métadonnées Swagger** : titre, description, tags décrits, exemples dans les schémas (`json_schema_extra`)
   📖 *Metadata and Docs URLs, Declare Request Example Data*
 - [x] **Gestionnaires d'exceptions** personnalisés : erreurs métier (`src/exceptions.py`) et erreurs base (503/500 sans détail SQL) 📖 *Handling Errors*
+- [x] **Codes HTTP** complétés 📖 *Additional Responses in OpenAPI, Handling Errors*
+  - [x] Chaque route déclare ses codes d'erreur dans Swagger (`responses=`, `src/reponses.py`), avec exemples ; 413/500/503 et schéma 422 ajoutés automatiquement
+  - [x] 401 / 404 / 405 du framework et 422 en français, 422 détaillé par champ (`src/gestion_erreurs.py`)
+  - [x] 400 : `PATCH /books/{id}` sans aucun champ
+  - [x] En-tête `Location` sur les 201 (`POST /books`, `POST /users/register`)
+  - [x] 413 : corps de requête limité à 1 Mo (`src/limite_taille.py`, `TAILLE_MAX_REQUETE`)
+  - [x] Codes de réponse colorés dans Swagger (2xx vert, 4xx orange, 5xx rouge) : page `/docs` personnalisée (`src/documentation.py`, `src/static/swagger.css`) 📖 *Custom Docs UI Static Assets*
 - [x] (Bonus) **BackgroundTasks** : « envoi » d'un mail de confirmation d'emprunt (journalisé) 📖 *Background Tasks*
+- [x] **Scopes OAuth2** (`Security`, `SecurityScopes`) : permissions `profil`, `emprunts`, `livres:ecrire`, `emprunts:gerer` dans le JWT, jetons restreints possibles, recoupées avec le rôle actuel (`src/permissions.py`, `src/dependances.py`) 📖 *Advanced Security → OAuth2 scopes*
+- [x] **Modèle de paramètres de requête** : `FiltresLivres` pour `GET /books`, paramètre inconnu refusé (`extra="forbid"`) 📖 *Query Parameter Models*
+- [x] **Middleware HTTP** : `X-Request-ID` (repris dans les journaux) et `X-Process-Time`, requêtes lentes signalées ; exposés via CORS (`src/suivi_requetes.py`) 📖 *Middleware*
+- [x] **Requêtes conditionnelles** : `ETag` sur `GET /books/{id}` (`304` avec `If-None-Match`), concurrence optimiste sur `PATCH` (`412` avec `If-Match`) (`src/etag.py`) 📖 *Header Parameters, Return a Response Directly*
+- [x] **Pagination dans les en-têtes** : `X-Total-Count` et `Link` (first / prev / next / last) sur `GET /books` 📖 *Response Headers*
+- [x] **Routeur `/admin` protégé au niveau du routeur** : `APIRouter(dependencies=[Depends(exiger_role_admin)])` + sous-routeurs avec leur permission (`src/routers/admin.py`) ; un test vérifie chaque route `/admin` 📖 *Bigger Applications – dependencies*
+- [x] **Versionnement** : toutes les routes sous `/v1` (`PREFIXE_API`), `/health` et `/docs` à la racine ; tests, script de charge et documentation mis à jour
+- [x] **Couvertures de livres** (`UploadFile`) : `PUT` / `DELETE /v1/admin/books/{id}/cover`, `GET /v1/books/{id}/cover` (ETag / 304), `couverture_url` dans les livres ; format vérifié par signature (JPEG, PNG, WebP, sinon `415`), 500 Ko max (`413`) ; table `couverture` (BLOB, `ON DELETE CASCADE`), 3e migration 📖 *Request Files*
+- [x] **Export CSV en flux** : `GET /loans/export` (`emprunts:gerer`), `StreamingResponse` + `yield_per` (`src/services/export.py`) 📖 *Custom Response – StreamingResponse*
 
 ## Phase 6 : Tests et qualité
-- [x] Tests avec **TestClient** et pytest : 36 tests (`uv run pytest`), sur la vraie base Oracle 📖 *Testing*
+- [x] Tests avec **TestClient** et pytest : 136 tests (`uv run pytest`), sur la vraie base Oracle 📖 *Testing*
 - [x] Remplacer `get_db` via `app.dependency_overrides` : chaque test tourne dans une transaction annulée à la fin (la base n'est jamais modifiée) 📖 *Testing Dependencies with Overrides*
 - [x] Tester au minimum : inscription, connexion, emprunt d'un livre indisponible (doit échouer), retour (+ jetons expirés/falsifiés, droits admin, CORS, erreurs base)
 - [x] Tests de sécurité (`tests/test_securite.py`) : force brute, injection SQL, jetons falsifiés, Argon2, droits Oracle de l'API
