@@ -1,0 +1,29 @@
+/* Style de Swagger UI (version utilisée par défaut par FastAPI), complété plus bas */
+@import url("https://cdn.jsdelivr.net/npm/swagger-ui-dist@5/swagger-ui.css");
+
+/* ---------------------------------------------------------------------------
+   Codes de réponse colorés selon leur famille :
+   2xx succès (vert), 3xx redirection (bleu), 4xx erreur client (orange),
+   5xx erreur serveur (rouge).
+   Swagger met l'attribut data-code="404" sur chaque ligne de réponse.
+   --------------------------------------------------------------------------- */
+
+.swagger-ui tr.response[data-code^="2"] { --couleur-code: #18794e; }
+.swagger-ui tr.response[data-code^="3"] { --couleur-code: #1d6fb8; }
+.swagger-ui tr.response[data-code^="4"] { --couleur-code: #c25e00; }
+.swagger-ui tr.response[data-code^="5"] { --couleur-code: #c62828; }
+
+/* Légende : les 3 <span> du dernier paragraphe de la description (src/main.py).
+   Ciblés par leur position car Swagger retire les attributs class et style. */
+.swagger-ui .info .description p:last-child > span { font-weight: 700; }
+.swagger-ui .info .description p:last-child > span:nth-of-type(1) { color: #18794e; }
+.swagger-ui .info .description p:last-child > span:nth-of-type(2) { color: #c25e00; }
+.swagger-ui .info .description p:last-child > span:nth-of-type(3) { color: #c62828; }
+
+.swagger-ui tr.response[data-code] > td.response-col_status {
+  color: var(--couleur-code);
+  font-weight: 700;
+  border-left: 4px solid var(--couleur-code);
+  background: color-mix(in srgb, var(--couleur-code) 8%, transparent);
+  padding-left: 12px;
+}

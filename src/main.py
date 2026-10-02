@@ -14,6 +14,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from config import get_settings
 from database import engine, get_db
+from documentation import installer_documentation
 from exceptions import ErreurMetier
 from gestion_erreurs import erreur_http, erreur_validation, personnaliser_openapi
 from limite_taille import LimiteTailleRequete
@@ -44,7 +45,12 @@ Gestion d'une bibliothèque en ligne : utilisateurs, livres et emprunts.
 **Authorize** et se connecter avec son email et son mot de passe.
 
 Les routes d'ajout, de modification et de suppression des livres sont réservées aux administrateurs.
+
+**Codes de réponse :** <span>2xx succès</span> · <span>4xx erreur dans la requête</span> ·
+<span>5xx erreur du serveur</span>
 """
+# ↑ Doit rester le dernier paragraphe : src/static/swagger.css colore ces 3 <span> par leur position
+# (Swagger retire les attributs class et style de la description)
 
 TAGS = [
     {"name": "Authentification", "description": "Connexion et obtention d'un jeton JWT."},
@@ -60,7 +66,9 @@ app = FastAPI(
     version="1.0.0",
     openapi_tags=TAGS,
     lifespan=lifespan,
+    docs_url=None,  # remplacée par installer_documentation (codes de réponse colorés)
 )
+installer_documentation(app)
 
 # Ajouté avant CORS : CORS reste le plus externe, donc les réponses 413 ont aussi leurs en-têtes CORS
 app.add_middleware(LimiteTailleRequete, taille_max=settings.taille_max_requete)

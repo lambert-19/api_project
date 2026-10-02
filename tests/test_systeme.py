@@ -34,3 +34,14 @@ def test_cors(client):
 
     assert preflight("http://localhost:3000").headers["access-control-allow-origin"] == "http://localhost:3000"
     assert "access-control-allow-origin" not in preflight("https://site-inconnu.example").headers
+
+
+def test_documentation_avec_codes_colores(client):
+    page = client.get("/docs")
+    style = client.get("/docs/style.css")
+
+    assert page.status_code == 200
+    assert 'href="/docs/style.css"' in page.text
+    assert "live-responses-table" in page.text  # script qui colore aussi les réponses de « Try it out »
+    assert style.headers["content-type"].startswith("text/css")
+    assert 'tr.response[data-code^="4"]' in style.text
