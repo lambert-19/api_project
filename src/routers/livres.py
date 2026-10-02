@@ -1,14 +1,17 @@
 from typing import Annotated
 
-from fastapi import APIRouter, HTTPException, Query, status
+from fastapi import APIRouter, HTTPException, Query, Request, Response, status
 from sqlalchemy import exists, func, select
 from sqlalchemy.exc import IntegrityError
 
 from dependances import AdminCourant, SessionDb
 from models import Emprunt, Livre
+from reponses import ADMIN_REQUIS, LIVRE_INTROUVABLE, creation, erreur
 from schemas.livre import LivreCreate, LivreOut, LivreUpdate
 
 router = APIRouter(prefix="/books", tags=["Livres"])
+
+ISBN_EN_DOUBLE = "Un livre avec cet ISBN existe déjà"
 
 
 def _get_livre(db: SessionDb, livre_id: int) -> Livre:
@@ -30,7 +33,7 @@ def _commit_ou_conflit(db: SessionDb) -> None:
         db.commit()
     except IntegrityError:
         db.rollback()
-        raise HTTPException(status.HTTP_409_CONFLICT, "Un livre avec cet ISBN existe déjà")
+        raise HTTPException(status.HTTP_409_CONFLICT, ISBN_EN_DOUBLE)
 
 
 @router.get("", response_model=list[LivreOut])
@@ -57,30 +60,57 @@ def rechercher_livres(
     return list(db.scalars(requete))
 
 
-@router.get("/{livre_id}", response_model=LivreOut)
+@router.get("/{livre_id}", response_model=LivreOut, responses=LIVRE_INTROUVABLE)
 def detail_livre(livre_id: int, db: SessionDb) -> Livre:
     """Informations détaillées d'un livre."""
     return _get_livre(db, livre_id)
 
 
-@router.post("", response_model=LivreOut, status_code=status.HTTP_201_CREATED)
-def ajouter_livre(donnees: LivreCreate, db: SessionDb, _: AdminCourant) -> Livre:
+@router.post(
+    "",
+    response_model=LivreOut,
+    status_code=status.HTTP_201_CREATED,
+    responses={
+        **creation("Livre créé ; l'en-tête Location donne son URL"),
+        **ADMIN_REQUIS,
+        409: erreur("ISBN déjà utilisé par un autre livre", ISBN_EN_DOUBLE),
+    },
+)
+def ajouter_livre(
+    donnees: LivreCreate, db: SessionDb, _: AdminCourant, request: Request, response: Response
+) -> Livre:
     """Ajout d'un livre (administrateurs)."""
     livre = Livre(**donnees.model_dump())
     db.add(livre)
     _commit_ou_conflit(db)
     db.refresh(livre)
+    response.headers["Location"] = request.app.url_path_for("detail_livre", livre_id=livre.id)
     return livre
 
 
-@router.patch("/{livre_id}", response_model=LivreOut)
+@router.patch(
+    "/{livre_id}",
+    response_model=LivreOut,
+    responses={
+        400: erreur("Aucun champ à modifier dans la requête", "Aucun champ à modifier"),
+        **ADMIN_REQUIS,
+        **LIVRE_INTROUVABLE,
+        409: erreur(
+            "Modification incompatible avec l'état du livre",
+            ISBN_EN_DOUBLE,
+            "Livre emprunté : enregistrer son retour",
+        ),
+    },
+)
 def modifier_livre(livre_id: int, donnees: LivreUpdate, db: SessionDb, _: AdminCourant) -> Livre:
     """Modification partielle d'un livre (administrateurs).
 
     Un livre emprunté ne peut pas être remis disponible : il faut enregistrer son retour.
     """
-    livre = _get_livre(db, livre_id)
     modifications = donnees.model_dump(exclude_unset=True)
+    if not modifications:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Aucun champ à modifier")
+    livre = _get_livre(db, livre_id)
     if modifications.get("disponible") and _a_des_emprunts(db, livre_id, en_cours_seulement=True):
         raise HTTPException(status.HTTP_409_CONFLICT, "Livre emprunté : enregistrer son retour")
     for champ, valeur in modifications.items():
@@ -90,7 +120,19 @@ def modifier_livre(livre_id: int, donnees: LivreUpdate, db: SessionDb, _: AdminC
     return livre
 
 
-@router.delete("/{livre_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete(
+    "/{livre_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    responses={
+        204: {"description": "Livre supprimé (réponse sans contenu)"},
+        **ADMIN_REQUIS,
+        **LIVRE_INTROUVABLE,
+        409: erreur(
+            "Le livre a un historique d'emprunts",
+            "Ce livre a un historique d'emprunts : le rendre indisponible plutôt que le supprimer",
+        ),
+    },
+)
 def supprimer_livre(livre_id: int, db: SessionDb, _: AdminCourant) -> None:
     """Suppression d'un livre (administrateurs).
 

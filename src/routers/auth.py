@@ -7,6 +7,7 @@ from sqlalchemy import select
 from dependances import SessionDb
 from limiteur import limiteur_connexion
 from models import Utilisateur
+from reponses import erreur
 from schemas.utilisateur import Jeton
 from security import creer_jeton, verifier_mot_de_passe
 
@@ -16,7 +17,18 @@ router = APIRouter(prefix="/auth", tags=["Authentification"])
 @router.post(
     "/token",
     response_model=Jeton,
-    responses={429: {"description": "Trop d'échecs de connexion depuis cette adresse IP"}},
+    responses={
+        401: erreur("Identifiants incorrects", "Email ou mot de passe incorrect"),
+        429: {
+            **erreur(
+                "Trop d'échecs de connexion depuis cette adresse IP",
+                "Trop de tentatives de connexion, réessayez dans 42 secondes",
+            ),
+            "headers": {
+                "Retry-After": {"description": "Secondes à attendre avant de réessayer", "schema": {"type": "integer"}}
+            },
+        },
+    },
 )
 def connexion(
     request: Request,

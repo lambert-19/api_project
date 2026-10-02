@@ -37,7 +37,7 @@ def test_inscription_donnees_invalides(client):
     )
 
     assert reponse.status_code == 422
-    champs_en_erreur = {erreur["loc"][-1] for erreur in reponse.json()["detail"]}
+    champs_en_erreur = {erreur["champ"] for erreur in reponse.json()["erreurs"]}
     assert champs_en_erreur == {"nom", "email", "telephone", "mot_de_passe"}
 
 

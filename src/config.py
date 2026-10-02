@@ -49,6 +49,9 @@ class Settings(_DatabaseSettings):
 
     cors_origins: list[str] = ["http://localhost:3000", "http://127.0.0.1:3000"]
 
+    # Taille maximale d'un corps de requête, en octets (au-delà : 413)
+    taille_max_requete: int = 1024 * 1024
+
     @property
     def database_url(self) -> URL:
         """Connexion de l'API (utilisateur à droits limités)."""

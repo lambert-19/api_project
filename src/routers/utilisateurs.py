@@ -1,10 +1,11 @@
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, Request, Response, status
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import joinedload
 
 from dependances import SessionDb, UtilisateurCourant
 from models import Emprunt, Utilisateur
+from reponses import NON_AUTHENTIFIE, creation, erreur
 from schemas.emprunt import EmpruntOut
 from schemas.utilisateur import UtilisateurCreate, UtilisateurOut
 from security import hasher_mot_de_passe
@@ -12,8 +13,16 @@ from security import hasher_mot_de_passe
 router = APIRouter(prefix="/users", tags=["Utilisateurs"])
 
 
-@router.post("/register", response_model=UtilisateurOut, status_code=status.HTTP_201_CREATED)
-def inscription(donnees: UtilisateurCreate, db: SessionDb) -> Utilisateur:
+@router.post(
+    "/register",
+    response_model=UtilisateurOut,
+    status_code=status.HTTP_201_CREATED,
+    responses={
+        **creation("Compte créé ; l'en-tête Location donne l'URL du profil (après connexion)"),
+        409: erreur("Email déjà utilisé par un autre compte", "Cet email est déjà utilisé"),
+    },
+)
+def inscription(donnees: UtilisateurCreate, db: SessionDb, request: Request, response: Response) -> Utilisateur:
     """Inscription d'un nouveau membre. Le rôle admin ne peut pas être choisi ici."""
     utilisateur = Utilisateur(
         nom=donnees.nom,
@@ -28,10 +37,11 @@ def inscription(donnees: UtilisateurCreate, db: SessionDb) -> Utilisateur:
         db.rollback()
         raise HTTPException(status.HTTP_409_CONFLICT, "Cet email est déjà utilisé")
     db.refresh(utilisateur)
+    response.headers["Location"] = request.app.url_path_for("mon_profil")
     return utilisateur
 
 
-@router.get("/me", response_model=UtilisateurOut)
+@router.get("/me", response_model=UtilisateurOut, responses=NON_AUTHENTIFIE)
 def mon_profil(utilisateur: UtilisateurCourant) -> Utilisateur:
     """Profil de l'utilisateur connecté."""
     return utilisateur
@@ -49,13 +59,13 @@ def _mes_emprunts(db: SessionDb, utilisateur: Utilisateur, en_cours: bool) -> li
     return list(db.scalars(requete))
 
 
-@router.get("/me/loans", response_model=list[EmpruntOut])
+@router.get("/me/loans", response_model=list[EmpruntOut], responses=NON_AUTHENTIFIE)
 def mes_emprunts_en_cours(utilisateur: UtilisateurCourant, db: SessionDb) -> list[Emprunt]:
     """Emprunts en cours (livres pas encore rendus)."""
     return _mes_emprunts(db, utilisateur, en_cours=True)
 
 
-@router.get("/me/history", response_model=list[EmpruntOut])
+@router.get("/me/history", response_model=list[EmpruntOut], responses=NON_AUTHENTIFIE)
 def mon_historique(utilisateur: UtilisateurCourant, db: SessionDb) -> list[Emprunt]:
     """Historique complet des emprunts, du plus récent au plus ancien."""
     return _mes_emprunts(db, utilisateur, en_cours=False)
