@@ -14,9 +14,14 @@ import hashlib
 from pydantic import BaseModel
 
 
+def etag_octets(contenu: bytes) -> str:
+    """ETag « fort » : empreinte SHA-256 du contenu renvoyé au client."""
+    return '"' + hashlib.sha256(contenu).hexdigest()[:20] + '"'
+
+
 def etag_de(ressource: BaseModel) -> str:
-    """ETag « fort » : empreinte SHA-256 de la représentation JSON renvoyée au client."""
-    return '"' + hashlib.sha256(ressource.model_dump_json().encode()).hexdigest()[:20] + '"'
+    """ETag d'une ressource JSON (empreinte de sa représentation)."""
+    return etag_octets(ressource.model_dump_json().encode())
 
 
 def correspond(entete: str | None, etag: str, *, comparaison_faible: bool) -> bool:

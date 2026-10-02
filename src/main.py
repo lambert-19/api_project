@@ -2,7 +2,7 @@ import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
-from fastapi import Depends, FastAPI, HTTPException, Request, status
+from fastapi import APIRouter, Depends, FastAPI, HTTPException, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
@@ -13,14 +13,14 @@ from sqlalchemy.orm import Session
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.middleware.base import BaseHTTPMiddleware
 
-from config import get_settings
+from config import PREFIXE_API, get_settings
 from database import engine, get_db
 from documentation import installer_documentation
 from exceptions import ErreurMetier
 from gestion_erreurs import erreur_http, erreur_validation, personnaliser_openapi
 from limite_taille import LimiteTailleRequete
 from reponses import erreur
-from routers import auth, emprunts, livres, utilisateurs
+from routers import admin, auth, emprunts, livres, utilisateurs
 from suivi_requetes import suivre_requete
 
 logger = logging.getLogger("uvicorn.error")
@@ -43,7 +43,11 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
 
 DESCRIPTION = """
 Gestion d'une bibliothèque en ligne : utilisateurs, livres et emprunts.
-**S'authentifier :** créer un compte avec `POST /users/register`, puis cliquer sur
+
+**Version :** toutes les routes sont préfixées par `/v1`. Les routes de gestion
+(inventaire, retards, export) sont regroupées sous `/v1/admin`, réservées aux administrateurs.
+
+**S'authentifier :** créer un compte avec `POST /v1/users/register`, puis cliquer sur
 **Authorize** et se connecter avec son email et son mot de passe.
 
 **Permissions (scopes OAuth2) :** chaque route protégée exige une permission, indiquée par
@@ -63,9 +67,14 @@ il est repris dans les journaux du serveur) et `X-Process-Time` (durée de trait
 TAGS = [
     {"name": "Authentification", "description": "Connexion et obtention d'un jeton JWT."},
     {"name": "Utilisateurs", "description": "Inscription, profil, emprunts en cours et historique."},
-    {"name": "Livres", "description": "Recherche et consultation pour tous ; gestion de l'inventaire pour les administrateurs."},
-    {"name": "Emprunts", "description": "Emprunt et retour des livres, suivi des retards."},
-    {"name": "Système", "description": "Supervision de l'API."},
+    {"name": "Livres", "description": "Recherche et consultation, pour tous."},
+    {"name": "Emprunts", "description": "Emprunt et retour de ses livres."},
+    {
+        "name": "Administration",
+        "description": "Gestion de l'inventaire, suivi des retards et export des emprunts. "
+        "Tout le routeur exige le rôle administrateur, puis la permission propre à chaque partie.",
+    },
+    {"name": "Système", "description": "Supervision de l'API (hors version)."},
 ]
 
 app = FastAPI(
@@ -125,10 +134,16 @@ async def erreur_base(request: Request, exc: SQLAlchemyError) -> JSONResponse:
     )
 
 
-app.include_router(auth.router)
-app.include_router(utilisateurs.router)
-app.include_router(livres.router)
-app.include_router(emprunts.router)
+# Versionnement : toutes les routes de l'API sous /v1. Une future version incompatible
+# serait un second APIRouter(prefix="/v2"), servi en parallèle de /v1.
+# /health et /docs restent à la racine : ils ne font pas partie du contrat de l'API.
+api_v1 = APIRouter(prefix=PREFIXE_API)
+api_v1.include_router(auth.router)
+api_v1.include_router(utilisateurs.router)
+api_v1.include_router(livres.router)
+api_v1.include_router(emprunts.router)
+api_v1.include_router(admin.router)
+app.include_router(api_v1)
 
 
 @app.get(

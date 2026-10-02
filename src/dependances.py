@@ -1,16 +1,18 @@
 from typing import Annotated
 
 from fastapi import Depends, HTTPException, Security, status
+from fastapi.params import Security as SecurityParam
 from fastapi.security import OAuth2PasswordBearer, SecurityScopes
 from sqlalchemy.orm import Session
 
+from config import PREFIXE_API
 from database import get_db
-from models import Utilisateur
+from models import RoleUtilisateur, Utilisateur
 from permissions import SCOPES, scopes_autorises
 from security import lire_jeton
 
 # `scopes` : affichés dans la fenêtre Authorize de Swagger, où on peut les cocher
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/token", scopes=SCOPES)
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl=f"{PREFIXE_API}/auth/token", scopes=SCOPES)
 
 SessionDb = Annotated[Session, Depends(get_db)]
 JetonBrut = Annotated[str, Depends(oauth2_scheme)]
@@ -53,9 +55,19 @@ def get_scopes_accordes(jeton: JetonBrut, db: SessionDb) -> frozenset[str]:
     return _authentifier(jeton, db)[1]
 
 
-# Une permission par usage : la route déclare ce dont elle a besoin
+def permission(scope: str) -> SecurityParam:
+    """Exige une permission, pour `APIRouter(dependencies=[permission("...")])` : toutes les
+    routes du routeur sont protégées d'un coup, sans paramètre à ajouter dans chaque fonction."""
+    return Security(get_current_user, scopes=[scope])
+
+
+def exiger_role_admin(utilisateur: Annotated[Utilisateur, Security(get_current_user)]) -> None:
+    """Protection de tout le routeur /admin : rôle administrateur exigé, quel que soit le jeton."""
+    if utilisateur.role != RoleUtilisateur.ADMIN:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Réservé aux administrateurs")
+
+
+# Routes qui ont besoin de l'utilisateur lui-même : la permission est déclarée dans le paramètre
 Profil = Annotated[Utilisateur, Security(get_current_user, scopes=["profil"])]
 Emprunteur = Annotated[Utilisateur, Security(get_current_user, scopes=["emprunts"])]
-GestionnaireLivres = Annotated[Utilisateur, Security(get_current_user, scopes=["livres:ecrire"])]
-GestionnaireEmprunts = Annotated[Utilisateur, Security(get_current_user, scopes=["emprunts:gerer"])]
 ScopesAccordes = Annotated[frozenset[str], Depends(get_scopes_accordes)]

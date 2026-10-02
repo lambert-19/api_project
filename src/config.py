@@ -4,6 +4,10 @@ from pydantic import SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from sqlalchemy import URL
 
+# Préfixe de toutes les routes de l'API : une future version incompatible serait servie
+# sous /v2, sans casser les clients qui utilisent encore /v1
+PREFIXE_API = "/v1"
+
 
 class _DatabaseSettings(BaseSettings):
     """Paramètres de connexion communs à l'API et aux migrations."""

@@ -62,7 +62,7 @@ def creer_utilisateur(db: Session, client: TestClient) -> Callable[..., tuple[Ut
         )
         db.add(utilisateur)
         db.commit()
-        reponse = client.post("/auth/token", data={"username": email, "password": MOT_DE_PASSE})
+        reponse = client.post("/v1/auth/token", data={"username": email, "password": MOT_DE_PASSE})
         return utilisateur, {"Authorization": f"Bearer {reponse.json()['access_token']}"}
 
     return _creer

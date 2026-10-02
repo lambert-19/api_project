@@ -53,4 +53,16 @@ def permission_requise(scope: str) -> dict[int, dict[str, Any]]:
         403: erreur(f"Le jeton n'a pas la permission « {scope} »", f"Permission insuffisante : {scope} requis"),
     }
 
+
+def admin_requis(scope: str) -> dict[int, dict[str, Any]]:
+    """Routes /admin : rôle administrateur ET permission `scope` exigés."""
+    return {
+        **NON_AUTHENTIFIE,
+        403: erreur(
+            f"Pas administrateur, ou jeton sans la permission « {scope} »",
+            "Réservé aux administrateurs",
+            f"Permission insuffisante : {scope} requis",
+        ),
+    }
+
 LIVRE_INTROUVABLE = {404: erreur("Aucun livre avec cet identifiant", "Livre introuvable")}

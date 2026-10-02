@@ -100,26 +100,26 @@ async def main() -> None:
         jetons = []
         async with httpx.AsyncClient(base_url=args.url) as client:
             for email in emails:
-                reponse = await client.post("/auth/token", data={"username": email, "password": MOT_DE_PASSE})
+                reponse = await client.post("/v1/auth/token", data={"username": email, "password": MOT_DE_PASSE})
                 jetons.append({"Authorization": f"Bearer {reponse.json()['access_token']}"})
 
         async def emprunt_retour(c: httpx.AsyncClient, i: int) -> list[httpx.Response]:
-            emprunt = await c.post("/loans", json={"livre_id": livres[i]}, headers=jetons[i])
-            retour = await c.post(f"/loans/{emprunt.json()['id']}/return", headers=jetons[i])
+            emprunt = await c.post("/v1/loans", json={"livre_id": livres[i]}, headers=jetons[i])
+            retour = await c.post(f"/v1/loans/{emprunt.json()['id']}/return", headers=jetons[i])
             return [emprunt, retour]
 
         scenarios: list[tuple[str, Requete]] = [
             ("GET /health", lambda c, i: asyncio.gather(c.get("/health"))),
-            ("GET /books (recherche)", lambda c, i: asyncio.gather(c.get("/books", params={"author": PREFIXE}))),
-            ("GET /books/{id}", lambda c, i: asyncio.gather(c.get(f"/books/{livres[i]}"))),
-            ("GET /users/me (JWT)", lambda c, i: asyncio.gather(c.get("/users/me", headers=jetons[i]))),
+            ("GET /v1/books (recherche)", lambda c, i: asyncio.gather(c.get("/v1/books", params={"author": PREFIXE}))),
+            ("GET /v1/books/{id}", lambda c, i: asyncio.gather(c.get(f"/v1/books/{livres[i]}"))),
+            ("GET /v1/users/me (JWT)", lambda c, i: asyncio.gather(c.get("/v1/users/me", headers=jetons[i]))),
             (
-                "POST /auth/token (Argon2)",
+                "POST /v1/auth/token (Argon2)",
                 lambda c, i: asyncio.gather(
-                    c.post("/auth/token", data={"username": emails[i], "password": MOT_DE_PASSE})
+                    c.post("/v1/auth/token", data={"username": emails[i], "password": MOT_DE_PASSE})
                 ),
             ),
-            ("POST /loans + /return", emprunt_retour),
+            ("POST /v1/loans + /return", emprunt_retour),
         ]
 
         print(f"{args.concurrence} clients simultanés, {args.duree:g} s par scénario, sur {args.url}\n")
